@@ -1,0 +1,41 @@
+# Binaries
+/bin/
+/dist/
+/backend/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test / coverage
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Go workspace
+/go.work
+/go.work.sum
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local config / secrets
+backend/configs/config.local.yaml
+*.local.yaml
+*.local.yml
+.env
+.env.local
+
+# Build artifacts
+/backend/dist/
+/backend/build/
+
+# Goose migration binary
+/backend/tmp/

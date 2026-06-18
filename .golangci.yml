@@ -1,0 +1,54 @@
+run:
+  timeout: 5m
+  tests: false
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+    - gocritic
+    - gosec
+    - revive
+    - misspell
+    - gomodguard
+
+linters-settings:
+  govet:
+    enable:
+      - shadow
+  staticcheck:
+    checks: ["all"]
+  gocritic:
+    enabled-tags:
+      - performance
+      - diagnostic
+    disabled-checks:
+      - hugeParam
+  gosec:
+    excludes:
+      - G104  # unhandled error - we use errcheck-like discipline manually
+      - G304  # file inclusion via variable - safe in our context
+  revive:
+    severity: warning
+    rules:
+      - name: exported
+        disabled: true
+      - name: var-naming
+        disabled: true
+      - name: package-comments
+        disabled: true
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec
+        - gocritic
+    - path: cmd/
+      linters:
+        - gosec
+  max-issues-per-linter: 0
+  max-same-issues: 0
