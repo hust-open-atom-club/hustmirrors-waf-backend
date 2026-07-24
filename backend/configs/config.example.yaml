@@ -1,0 +1,243 @@
+# =============================================================================
+# mirrors-waf-backend example configuration.
+#
+# Copy this file to config.local.yaml and adjust as needed. The service
+# will auto-discover config.local.yaml in the current directory or in
+# ./configs/; you can also pass --config /path/to/config.yaml explicitly.
+#
+# Environment variable overrides use prefix MIRRORS_WAF_ with "__" as the
+# section separator, e.g.:
+#   MIRRORS_WAF_SERVER__LISTEN=127.0.0.1:8080
+#   MIRRORS_WAF_POW__DRY_RUN=true
+# =============================================================================
+
+server:
+  listen: "127.0.0.1:8080"
+  read_timeout: "2s"
+  write_timeout: "2s"
+  idle_timeout: "30s"
+  shutdown_timeout: "5s"
+
+pow:
+  # Master switch. When false, the service still runs but every request
+  # falls through to the risk engine's default policy (or 200 ok when
+  # risk control is disabled).
+  enabled: true
+
+  # Dry-run mode: full verification runs, but would-be-deny results are
+  # rewritten to 200 allow and the original reason is preserved in the
+  # X-Pow-Dry-Run-Original-Error header. Useful for staging.
+  dry_run: false
+
+  # Bypass all: every request is allowed with X-Pow-Reason=bypass_all.
+  # Use this as an emergency switch only.
+  bypass_all: false
+
+  # URL parameter names. Change here if your front-end uses a different
+  # convention.
+  token_param: "token"
+  sign_param: "sign"
+
+  max_token_length: 4096
+  max_sign_length: 128
+
+  algorithm: "sha256"
+
+  # Public salt rotates the canonical string so attackers can't precompute
+  # a large dictionary of valid signs. Bump it periodically.
+  public_salt: "2025-demo-salt"
+  allow_empty_salt: true
+  allowed_previous_salts: []
+
+  modes:
+    # Mode A: bound to the client IP. Long TTL, no usage counter.
+    ip_bound:
+      enabled: true
+      min_difficulty: 22
+      max_difficulty: 28
+      max_ttl_seconds: 86400     # 24h
+      require_ip: true
+      count_usage: false
+      max_uses: 0                # 0 = unlimited
+
+    # Mode B: short-lived, usage-capped. Suitable for copy-paste to
+    # headless environments.
+    generic:
+      enabled: true
+      min_difficulty: 22
+      max_difficulty: 28
+      max_ttl_seconds: 1800      # 30 min
+      max_uses: 5
+      count_head_request: false  # HEAD does not consume uses
+
+protection:
+  # Extension-based protection. Case-insensitive.
+  protected_extensions:
+    - ".iso"
+    - ".img"
+    - ".qcow2"
+    - ".vmdk"
+    - ".vdi"
+    - ".ova"
+    - ".zip"
+    - ".7z"
+    - ".tar"
+    - ".tar.gz"
+    - ".tar.xz"
+
+  # Regex-based protection (in addition to extensions).
+  protected_paths:
+    - "^/ubuntu-releases/.+\\.iso$"
+    - "^/debian-cd/.+\\.iso$"
+    - "^/archlinux/iso/.+\\.iso$"
+
+  # Regex-based exclusions (override protected rules).
+  excluded_paths:
+    - "^/assets/"
+    - "^/static/"
+    - "^/\\.well-known/"
+    - "^/.+/Packages(\\.gz|\\.xz|\\.zst)?$"
+    - "^/.+/Release$"
+    - "^/.+/InRelease$"
+    - "^/.+/repomd\\.xml$"
+
+storage:
+  # memory | postgres
+  driver: "memory"
+  # memory | redis
+  counter_driver: "memory"
+
+  postgres:
+    dsn: "postgres://user:pass@127.0.0.1:5432/mirrors_pow?sslmode=disable"
+    max_open_conns: 20
+    max_idle_conns: 5
+
+  redis:
+    addr: "127.0.0.1:6379"
+    password: ""
+    db: 0
+    key_prefix: "mirrors-waf"
+
+risk_control:
+  enabled: true
+
+  counters:
+    ip_protected_requests_10m:
+      key: "ip"
+      window: "10m"
+      when:
+        is_protected: true
+      storage: "redis"
+
+    ip_missing_pow_1h:
+      key: "ip"
+      window: "1h"
+      when:
+        is_protected: true
+        pow_status: "missing"
+      storage: "redis"
+
+    ip_protected_requests_1h:
+      key: "ip"
+      window: "1h"
+      when:
+        is_protected: true
+      storage: "redis"
+
+  chains:
+    INPUT:
+      policy:
+        target: RATE_LIMIT
+        limit_rate: "512k"
+        reason: "default_unverified_slow"
+      rules:
+        - name: "allow metadata"
+          match:
+            path_regex: "^/.+/(Packages|Release|InRelease|repomd\\.xml)(\\..+)?$"
+          target: ACCEPT
+          limit_rate: "0"
+          reason: "metadata_full_speed"
+
+        - name: "allow non protected path"
+          match:
+            is_protected: false
+          target: ACCEPT
+          limit_rate: "0"
+          reason: "not_protected"
+
+        - name: "reject invalid pow"
+          match:
+            pow_status_in: ["invalid", "expired", "used_up"]
+          target: REJECT
+          status: 403
+          reason: "invalid_pow"
+
+        - name: "allow valid pow full speed"
+          match:
+            pow_status: "valid"
+          target: ACCEPT
+          limit_rate: "0"
+          reason: "valid_pow_full_speed"
+
+        - name: "missing pow risk check"
+          match:
+            pow_status: "missing"
+            is_protected: true
+          target: JUMP
+          chain: RISK_CHECK
+
+    RISK_CHECK:
+      policy:
+        target: RATE_LIMIT
+        limit_rate: "512k"
+        reason: "normal_unverified_slow"
+      rules:
+        - name: "many protected downloads per ip"
+          match:
+            counter:
+              name: "ip_protected_requests_10m"
+              op: ">="
+              value: 5
+          target: RATE_LIMIT
+          limit_rate: "128k"
+          reason: "too_many_protected_requests"
+
+        - name: "extreme abuse"
+          match:
+            counter:
+              name: "ip_protected_requests_1h"
+              op: ">="
+              value: 20
+          target: TOO_MANY
+          status: 429
+          reason: "extreme_abuse"
+
+admin:
+  # Leave disabled in production unless you need the RPC admin API. When
+  # enabled, bind only to localhost or an internal interface.
+  enabled: false
+  listen: "127.0.0.1:8081"
+  auth:
+    type: "token"                 # token | basic | none
+    token_file: "/etc/mirrors-waf/admin.token"
+    # Alternatively, set the token inline:
+    # token: "changeme"
+  allow_cidrs:
+    - "127.0.0.1/32"
+    - "10.0.0.0/8"
+  audit_log: true
+
+logging:
+  level: "info"                   # debug | info | warn | error
+  format: "json"                  # json | console
+  log_access: true
+  log_denied: true
+  # When hash_ip is true, client IPs in logs are replaced with a
+  # salted SHA-256 prefix. Set log_salt to a random 16+ char string.
+  hash_ip: false
+  log_salt: ""
+
+cleanup:
+  enabled: true
+  interval: "10m"
+  expired_grace_period: "24h"

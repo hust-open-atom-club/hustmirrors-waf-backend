@@ -1,0 +1,43 @@
+[Unit]
+Description=mirrors-waf-backend PoW auth_request service
+Documentation=https://github.com/hust-open-atom-club/hustmirrors-waf-backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mirrors-waf
+Group=mirrors-waf
+RuntimeDirectory=mirrors-waf
+
+# Path to the config file. Override with the MIRRORS_WAF_CONFIG environment
+# variable or the --config flag below.
+Environment=MIRRORS_WAF_CONFIG=/etc/mirrors-waf/config.yaml
+
+ExecStart=/usr/local/bin/server --config ${MIRRORS_WAF_CONFIG}
+
+# Graceful shutdown: SIGTERM triggers the app's signal handler.
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+
+# The service needs to read its config file and (optional) admin token file.
+ReadOnlyPaths=/etc/mirrors-waf
+ReadWritePaths=/var/lib/mirrors-waf
+
+[Install]
+WantedBy=multi-user.target

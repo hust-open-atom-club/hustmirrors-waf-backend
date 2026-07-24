@@ -1,0 +1,62 @@
+# Minimal config suitable for local development.
+# Uses in-memory storage and disables risk control + admin API.
+
+server:
+  listen: "127.0.0.1:8080"
+  read_timeout: "2s"
+  write_timeout: "2s"
+
+pow:
+  enabled: true
+  dry_run: false
+  bypass_all: false
+  token_param: "token"
+  sign_param: "sign"
+  max_token_length: 4096
+  max_sign_length: 128
+  algorithm: "sha256"
+  public_salt: "dev-salt"
+  allow_empty_salt: true
+  modes:
+    ip_bound:
+      enabled: true
+      min_difficulty: 8         # low for dev so minting is fast
+      max_difficulty: 32
+      max_ttl_seconds: 86400
+      require_ip: true
+    generic:
+      enabled: true
+      min_difficulty: 8
+      max_difficulty: 32
+      max_ttl_seconds: 1800
+      max_uses: 5
+
+protection:
+  protected_extensions:
+    - ".iso"
+    - ".img"
+    - ".tar.gz"
+    - ".zip"
+  protected_paths: []
+  excluded_paths:
+    - "^/static/"
+
+storage:
+  driver: "memory"
+  counter_driver: "memory"
+
+risk_control:
+  enabled: false
+
+admin:
+  enabled: false
+
+logging:
+  level: "debug"
+  format: "console"
+  log_access: true
+  log_denied: true
+  hash_ip: false
+
+cleanup:
+  enabled: false

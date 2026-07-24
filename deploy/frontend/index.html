@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>镜像站 PoW 下载链接生成</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+            max-width: 720px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            color: #1a1a1a;
+            background: #fafafa;
+        }
+        h1 { font-size: 1.4rem; }
+        .field { margin: 1rem 0; }
+        label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+        input[type="text"], select {
+            width: 100%; padding: 0.5rem; font-size: 0.9rem;
+            border: 1px solid #ccc; border-radius: 4px;
+        }
+        .modes { display: flex; gap: 1rem; margin: 0.5rem 0; }
+        .mode-option {
+            flex: 1; padding: 0.75rem; border: 1px solid #ddd;
+            border-radius: 4px; cursor: pointer;
+        }
+        .mode-option.active { border-color: #0066cc; background: #eef5ff; }
+        .mode-option .name { font-weight: 600; }
+        .mode-option .desc { font-size: 0.8rem; color: #666; margin-top: 0.25rem; }
+        button {
+            padding: 0.6rem 1.5rem; font-size: 1rem; cursor: pointer;
+            border: none; border-radius: 4px; background: #0066cc; color: white;
+        }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .progress { margin: 1rem 0; }
+        .progress-bar {
+            height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden;
+        }
+        .progress-fill { height: 100%; background: #0066cc; transition: width 0.2s; }
+        .result {
+            margin: 1rem 0; padding: 1rem; background: #f0f0f0;
+            border-radius: 4px; word-break: break-all; font-family: monospace;
+            font-size: 0.85rem;
+        }
+        .result textarea {
+            width: 100%; height: 80px; font-family: monospace; font-size: 0.85rem;
+            border: 1px solid #ccc; border-radius: 4px; padding: 0.5rem;
+        }
+        .copy-btn { margin-top: 0.5rem; background: #666; }
+        .hint { font-size: 0.85rem; color: #666; margin-top: 0.25rem; }
+        .error { color: #cc0000; }
+    </style>
+</head>
+<body>
+    <h1>镜像站 PoW 下载链接生成</h1>
+
+    <div class="field">
+        <label>下载路径</label>
+        <input type="text" id="path" placeholder="/ubuntu-releases/22.04/ubuntu-22.04.3-live-server-amd64.iso">
+        <div class="hint">从镜像站复制完整路径，以 / 开头</div>
+    </div>
+
+    <div class="field">
+        <label>模式</label>
+        <div class="modes">
+            <div class="mode-option active" data-mode="generic" onclick="selectMode('generic')">
+                <div class="name">通用链接（短效）</div>
+                <div class="desc">不绑 IP，30 分钟内可下载 5 次。适合复制到服务器用 wget/curl。</div>
+            </div>
+            <div class="mode-option" data-mode="ip_bound" onclick="selectMode('ip_bound')">
+                <div class="name">绑定 IP（长效）</div>
+                <div class="desc">绑定当前 IP，24 小时有效，不限次数。适合本机浏览器直接下载。</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="field">
+        <button id="generate" onclick="generate()">生成下载链接</button>
+    </div>
+
+    <div class="progress" id="progress" style="display:none">
+        <div>正在计算 PoW... <span id="attempts">0</span> 次尝试</div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    </div>
+
+    <div class="result" id="result" style="display:none">
+        <label>下载链接（复制到浏览器或 wget/curl）</label>
+        <textarea id="download-url" readonly></textarea>
+        <button class="copy-btn" onclick="copyUrl()">复制链接</button>
+        <div id="meta" class="hint"></div>
+    </div>
+
+    <div class="error" id="error"></div>
+
+    <script src="pow.js"></script>
+</body>
+</html>

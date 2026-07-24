@@ -1,0 +1,18 @@
+{
+    "algorithm": "sha256",
+    "salt": "2025-demo-salt",
+    "modes": {
+        "ip_bound": {
+            "enabled": true,
+            "difficulty": 22,
+            "ttl_seconds": 86400
+        },
+        "generic": {
+            "enabled": true,
+            "difficulty": 22,
+            "ttl_seconds": 1800,
+            "max_uses": 5
+        }
+    },
+    "protected_extensions": [".iso", ".img", ".qcow2", ".vmdk", ".vdi", ".ova", ".zip", ".7z", ".tar", ".tar.gz", ".tar.xz"]
+}
