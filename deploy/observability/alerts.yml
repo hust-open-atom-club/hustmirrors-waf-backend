@@ -1,0 +1,94 @@
+# Prometheus alerting rules for mirrors-waf-backend.
+#
+# Load this in your Prometheus config:
+#   rule_files:
+#     - /etc/prometheus/rules/mirrors-waf-alerts.yml
+#
+# Pair with Alertmanager for notification routing.
+
+groups:
+  - name: mirrors-waf-backend
+    rules:
+      # High-level: the service is down or unreachable.
+      - alert: MirrorsWafDown
+        expr: up{job="mirrors-waf-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "mirrors-waf-backend is down"
+          description: "Prometheus cannot scrape the backend on {{ $labels.instance }}."
+
+      # Elevated 5xx rate — likely storage failures or internal errors.
+      - alert: MirrorsWafHighErrorRate
+        expr: |
+          sum(rate(mirrors_waf_pow_verify_total{result="deny",reason=~"storage_error|internal_error|missing_headers"}[5m]))
+          /
+          sum(rate(mirrors_waf_pow_verify_total[5m]))
+          > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mirrors-waf-backend error rate > 1%"
+          description: "5xx-class deny reasons exceed 1% of total verifications for 5 minutes."
+
+      # Verification latency too high — will cause Nginx auth_request timeouts.
+      - alert: MirrorsWafHighLatency
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(mirrors_waf_pow_verify_latency_seconds_bucket[5m])) by (le)
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mirrors-waf-backend p99 latency > 100ms"
+          description: "p99 verification latency exceeds 100ms. Nginx auth_request timeout is 2s; investigate storage or CPU pressure."
+
+      # Deny rate spike — could indicate an attack or a config regression
+      # that breaks legitimate tokens.
+      - alert: MirrorsWafDenyRateSpike
+        expr: |
+          sum(rate(mirrors_waf_pow_verify_total{result="deny"}[10m]))
+          /
+          sum(rate(mirrors_waf_pow_verify_total[10m]))
+          > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mirrors-waf-backend deny rate > 50%"
+          description: "More than half of verifications are denied for 10 minutes. Check for config drift (salt/difficulty mismatch) or attack."
+
+      # Rate-limit (TOO_MANY) decisions spiking — active abuse.
+      - alert: MirrorsWafTooManySpike
+        expr: |
+          sum(rate(mirrors_waf_risk_decision_total{target="TOO_MANY"}[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mirrors-waf-backend TOO_MANY decisions > 10/min"
+          description: "Risk engine is rate-limiting aggressively. Investigate source IPs in the access log."
+
+      # Storage errors — Redis or PostgreSQL connectivity issues.
+      - alert: MirrorsWafStorageErrors
+        expr: |
+          sum(rate(mirrors_waf_storage_operations_total{outcome="err"}[5m])) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "mirrors-waf-backend storage errors"
+          description: "Storage operations are failing. Check PostgreSQL/Redis connectivity."
+
+      # Dry-run mode accidentally left on in production.
+      - alert: MirrorsWafDryRunInProd
+        expr: mirrors_waf_pow_verify_total{reason="dry_run_allow"} > 0
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "mirrors-waf-backend dry_run is ON"
+          description: "Dry-run mode is active. Denies are being rewritten to allows. Turn off for production."
