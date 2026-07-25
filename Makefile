@@ -1,11 +1,5 @@
 # Mirrors WAF Backend Makefile
-# Go binary override (Windows-friendly; default assumes Go on PATH)
-GO ?= "C:/Users/Ran/sdk/go1.24.4/bin/go.exe"
-
-# Allow overriding via shell PATH on non-Windows
-ifneq ($(OS),Windows_NT)
-	GO := go
-endif
+GO ?= go
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/server
