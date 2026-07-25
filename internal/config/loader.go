@@ -54,7 +54,6 @@ func LoadRaw(path string) (*Config, error) {
 		// Look in a few well-known locations.
 		v.AddConfigPath(".")
 		v.AddConfigPath("./configs")
-		v.AddConfigPath("./backend/configs")
 		v.AddConfigPath("/etc/mirrors-waf")
 	}
 

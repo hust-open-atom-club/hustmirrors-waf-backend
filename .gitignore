@@ -1,7 +1,6 @@
 # Binaries
 /bin/
 /dist/
-/backend/bin/
 *.exe
 *.exe~
 *.dll
@@ -27,15 +26,16 @@ coverage.html
 Thumbs.db
 
 # Local config / secrets
-backend/configs/config.local.yaml
+configs/config.local.yaml
 *.local.yaml
 *.local.yml
 .env
 .env.local
 
 # Build artifacts
-/backend/dist/
-/backend/build/
+/dist/
+/build/
 
 # Goose migration binary
-/backend/tmp/
+/tmp/
+.narrafork/

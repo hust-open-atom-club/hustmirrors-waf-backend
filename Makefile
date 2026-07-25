@@ -7,9 +7,7 @@ ifneq ($(OS),Windows_NT)
 	GO := go
 endif
 
-BACKEND_DIR := backend
-CMD_DIR := $(BACKEND_DIR)/cmd/server
-BIN_DIR := $(BACKEND_DIR)/bin
+BIN_DIR := bin
 BIN := $(BIN_DIR)/server
 
 VERSION ?= dev
@@ -28,35 +26,35 @@ all: build
 build:
 	@echo ">> Building $(BIN)"
 	@mkdir -p $(BIN_DIR)
-	@cd $(BACKEND_DIR) && $(GO) build -ldflags '$(LDFLAGS)' -o $(BIN) ./cmd/server
+	@$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN) ./cmd/server
 
 run:
-	@cd $(BACKEND_DIR) && $(GO) run -ldflags '$(LDFLAGS)' ./cmd/server
+	@$(GO) run -ldflags '$(LDFLAGS)' ./cmd/server
 
 test:
-	@cd $(BACKEND_DIR) && $(GO) test -count=1 ./...
+	@$(GO) test -count=1 ./...
 
 test-race:
-	@cd $(BACKEND_DIR) && $(GO) test -race -count=1 ./...
+	@$(GO) test -race -count=1 ./...
 
 vet:
-	@cd $(BACKEND_DIR) && $(GO) vet ./...
+	@$(GO) vet ./...
 
 lint:
 	@echo ">> Running golangci-lint"
-	@golangci-lint run ./... || (echo "[warn] golangci-lint not installed; running go vet instead" && cd $(BACKEND_DIR) && $(GO) vet ./...)
+	@golangci-lint run ./... || (echo "[warn] golangci-lint not installed; running go vet instead" && $(GO) vet ./...)
 
 fmt:
-	@cd $(BACKEND_DIR) && $(GO) fmt ./...
+	@$(GO) fmt ./...
 
 tidy:
-	@cd $(BACKEND_DIR) && $(GO) mod tidy
+	@$(GO) mod tidy
 
 migrate-up:
-	@cd $(BACKEND_DIR) && $(GO) run github.com/pressly/goose/v3/cmd/goose -dir migrations up
+	@$(GO) run github.com/pressly/goose/v3/cmd/goose -dir migrations up
 
 migrate-down:
-	@cd $(BACKEND_DIR) && $(GO) run github.com/pressly/goose/v3/cmd/goose -dir migrations down
+	@$(GO) run github.com/pressly/goose/v3/cmd/goose -dir migrations down
 
 clean:
 	@rm -rf $(BIN_DIR)
