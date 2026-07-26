@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/logging"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/pow"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/risk"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/storage"
@@ -108,6 +109,16 @@ func (s *Service) finalizeIPBound(ctx context.Context, p *pow.TokenPayload, req 
 	if p.IP == "" {
 		return s.maybeDryRun(ctx, denyMode(ReasonIPMissing, mode))
 	}
+	// An absent X-Real-IP means Nginx is not forwarding it. Failing this as
+	// ip_mismatch would blame the client for a server misconfiguration and
+	// make every ip_bound token look forged, so surface it as a 500 with a
+	// distinct reason instead.
+	if req.RealIP == "" {
+		s.logger.Error(ctx, "X-Real-IP is empty; ip_bound tokens cannot be verified. "+
+			"Check that Nginx sets proxy_set_header X-Real-IP on the auth_request location",
+			logging.String("path", req.OriginalURI))
+		return denyStatus(500, ReasonMissingRealIP, mode)
+	}
 	if !sameIP(p.IP, req.RealIP) {
 		return s.maybeDryRun(ctx, denyMode(ReasonIPMismatch, mode))
 	}
@@ -159,7 +170,13 @@ func (s *Service) finalizeGeneric(ctx context.Context, p *pow.TokenPayload, req 
 // classifyPoW does a side-effect-free classification for the risk engine's
 // pre-evaluation. It returns (payload, pow_status, pow_mode) where
 // pow_status is one of: missing, valid, invalid, expired.
-func (s *Service) classifyPoW(_ context.Context, tokenRaw, sign, path, realIP string) (*pow.TokenPayload, string, string) {
+//
+// realIP may legitimately be empty here (see finalizeIPBound): rather than
+// classify an otherwise-valid ip_bound token as "invalid" and let risk
+// rules act on a verdict caused by proxy misconfiguration, the IP check is
+// skipped and the authoritative decision is left to finalizeIPBound, which
+// fails the request closed with a 500.
+func (s *Service) classifyPoW(ctx context.Context, tokenRaw, sign, path, realIP string) (*pow.TokenPayload, string, string) {
 	if len(tokenRaw) > s.cfg.Pow.MaxTokenLength || len(sign) > s.cfg.Pow.MaxSignLength {
 		return nil, "invalid", ""
 	}
@@ -185,7 +202,7 @@ func (s *Service) classifyPoW(_ context.Context, tokenRaw, sign, path, realIP st
 	if _, ok := checkSignAndDifficulty(payload, sign); !ok {
 		return payload, "invalid", mode
 	}
-	if mode == "ip_bound" && !sameIP(payload.IP, realIP) {
+	if mode == "ip_bound" && realIP != "" && !sameIP(payload.IP, realIP) {
 		return payload, "invalid", mode
 	}
 	return payload, "valid", mode

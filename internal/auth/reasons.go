@@ -46,6 +46,10 @@ const (
 	ReasonInvalidIP            = "invalid_ip"
 	ReasonIPForbidden          = "ip_forbidden"
 	ReasonIPMissing            = "ip_missing"
+	// ReasonMissingRealIP means the request carried no X-Real-IP, so an
+	// ip_bound token cannot be verified. This is a proxy misconfiguration,
+	// not a client error, and is reported as 500.
+	ReasonMissingRealIP = "missing_real_ip"
 	ReasonInvalidSignFormat    = "invalid_sign_format"
 	ReasonSignMismatch         = "sign_mismatch"
 	ReasonDifficultyNotMet     = "difficulty_not_met"
@@ -68,7 +72,8 @@ func statusForReason(reason string) int {
 		return 200
 	case ReasonRateLimited, ReasonRiskTooMany:
 		return 429
-	case ReasonStorageError, ReasonInternalError, ReasonMissingHeaders:
+	case ReasonStorageError, ReasonInternalError, ReasonMissingHeaders,
+		ReasonMissingRealIP:
 		return 500
 	}
 	return 403

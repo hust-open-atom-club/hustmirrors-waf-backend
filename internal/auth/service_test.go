@@ -194,6 +194,71 @@ func TestVerify_PathMismatch(t *testing.T) {
 	assert.Equal(t, ReasonPathMismatch, res.Reason)
 }
 
+// TestVerify_IPBound_MissingRealIP covers the case where Nginx is not
+// forwarding X-Real-IP. Blaming the client with a 403 ip_mismatch would be
+// wrong and near-impossible to diagnose from the client side, so the
+// request must fail closed as a server error with a distinct reason.
+func TestVerify_IPBound_MissingRealIP(t *testing.T) {
+	svc, _, _, mint := makeTestService(t, nil)
+	payload := findValidCounterForDifficulty(t, pow.TokenPayload{
+		Mode: "ip_bound", Path: "/ubuntu.iso", IP: "1.2.3.4",
+	}, 8)
+	token, sign := mint(payload)
+	res := svc.Verify(context.Background(), AuthRequest{
+		OriginalURI:    "/ubuntu.iso",
+		OriginalMethod: "GET",
+		OriginalArgs:   "token=" + token + "&sign=" + sign,
+		RealIP:         "",
+	})
+	assert.False(t, res.Allowed)
+	assert.Equal(t, 500, res.HTTPStatus, "must be a server error, not a 403")
+	assert.Equal(t, ReasonMissingRealIP, res.Reason)
+	assert.NotEqual(t, ReasonIPMismatch, res.Reason,
+		"must not be reported as a client-side IP mismatch")
+}
+
+// TestVerify_IPBound_MissingRealIP_NotRescuedByDryRun ensures the misconfig
+// signal survives dry-run mode, which otherwise rewrites denials to allows.
+// Silently serving traffic here would hide a broken deployment.
+func TestVerify_IPBound_MissingRealIP_NotRescuedByDryRun(t *testing.T) {
+	cfg := makeBaseConfig()
+	cfg.Pow.DryRun = true
+	svc, _, _, mint := makeTestService(t, cfg)
+	payload := findValidCounterForDifficulty(t, pow.TokenPayload{
+		Mode: "ip_bound", Path: "/ubuntu.iso", IP: "1.2.3.4",
+	}, 8)
+	token, sign := mint(payload)
+	res := svc.Verify(context.Background(), AuthRequest{
+		OriginalURI:    "/ubuntu.iso",
+		OriginalMethod: "GET",
+		OriginalArgs:   "token=" + token + "&sign=" + sign,
+		RealIP:         "",
+	})
+	assert.False(t, res.Allowed, "dry-run must not mask a proxy misconfiguration")
+	assert.Equal(t, ReasonMissingRealIP, res.Reason)
+}
+
+// TestClassifyPoW_MissingRealIPDoesNotMarkTokenInvalid guards the risk-engine
+// input: an otherwise-valid ip_bound token must not be classified "invalid"
+// just because X-Real-IP is absent, or risk rules keyed on pow_status would
+// act on a verdict caused by misconfiguration rather than by the client.
+func TestClassifyPoW_MissingRealIPDoesNotMarkTokenInvalid(t *testing.T) {
+	svc, _, _, mint := makeTestService(t, nil)
+	payload := findValidCounterForDifficulty(t, pow.TokenPayload{
+		Mode: "ip_bound", Path: "/ubuntu.iso", IP: "1.2.3.4",
+	}, 8)
+	token, sign := mint(payload)
+
+	_, status, mode := svc.classifyPoW(context.Background(), token, sign, "/ubuntu.iso", "")
+	assert.Equal(t, "ip_bound", mode)
+	assert.Equal(t, "valid", status,
+		"empty realIP must not downgrade the classification to invalid")
+
+	// A genuine mismatch, where realIP is present, still classifies invalid.
+	_, status, _ = svc.classifyPoW(context.Background(), token, sign, "/ubuntu.iso", "9.9.9.9")
+	assert.Equal(t, "invalid", status)
+}
+
 func TestVerify_IPBoundValid(t *testing.T) {
 	svc, _, _, mint := makeTestService(t, nil)
 	payload := findValidCounterForDifficulty(t, pow.TokenPayload{
