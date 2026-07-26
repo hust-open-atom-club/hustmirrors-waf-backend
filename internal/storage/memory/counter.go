@@ -12,10 +12,20 @@ import (
 // the key includes a time-bucket index computed as now/window, so a counter
 // value covers a strict time window aligned to Unix epoch boundaries. Once
 // the window rolls over, counts from the previous window are not included.
+//
+// Rolled-over buckets are unreachable but still resident, and the key space
+// is attacker-influenced (counters are typically keyed by client IP), so
+// they are swept periodically. Without that the map grows without bound
+// for the lifetime of the process: every new window mints fresh keys and
+// nothing ever removes the old ones.
 type CounterStore struct {
 	mu      sync.Mutex
 	buckets map[string]*counterBucket
 	closed  bool
+
+	// lastSweep throttles the scan so a burst of Incr calls does not turn
+	// into a burst of full map walks.
+	lastSweep time.Time
 }
 
 type counterBucket struct {
@@ -23,8 +33,26 @@ type counterBucket struct {
 	expiresAt time.Time
 }
 
+// sweepInterval bounds how often expired buckets are collected. Buckets
+// are cheap (~64 bytes), so trading a little residency for far fewer scans
+// is the right side of that tradeoff.
+const sweepInterval = 30 * time.Second
+
 func NewCounterStore() *CounterStore {
 	return &CounterStore{buckets: make(map[string]*counterBucket)}
+}
+
+// sweepLocked drops expired buckets. The caller must hold s.mu.
+func (s *CounterStore) sweepLocked(now time.Time) {
+	if now.Sub(s.lastSweep) < sweepInterval {
+		return
+	}
+	s.lastSweep = now
+	for k, b := range s.buckets {
+		if now.After(b.expiresAt) {
+			delete(s.buckets, k)
+		}
+	}
 }
 
 func (s *CounterStore) Incr(_ context.Context, name, key string, window time.Duration) (int64, time.Duration, error) {
@@ -37,6 +65,7 @@ func (s *CounterStore) Incr(_ context.Context, name, key string, window time.Dur
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
+	s.sweepLocked(now)
 	bucketKey := bucketKey(name, key, window, now)
 	b, ok := s.buckets[bucketKey]
 	if !ok || now.After(b.expiresAt) {

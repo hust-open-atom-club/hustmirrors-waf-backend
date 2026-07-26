@@ -209,3 +209,55 @@ func TestCounterStore_CloseErrors(t *testing.T) {
 	_, _, err := s.Incr(context.Background(), "a", "k", time.Minute)
 	require.ErrorIs(t, err, storage.ErrClosed)
 }
+
+// TestCounterStore_ExpiredBucketsAreReclaimed guards against unbounded
+// growth. The bucket key embeds a window index, so every rollover mints a
+// fresh key while the previous one becomes unreachable. Nothing used to
+// remove them, and because counters are normally keyed by client IP the
+// key space is attacker-influenced: the map grew until the process died.
+func TestCounterStore_ExpiredBucketsAreReclaimed(t *testing.T) {
+	s := NewCounterStore()
+	defer s.Close()
+	ctx := context.Background()
+	const window = time.Millisecond
+
+	for i := 0; i < 200; i++ {
+		// The sweep is time-throttled; reset the clock on it so the test
+		// exercises reclamation without sleeping for the real interval.
+		s.mu.Lock()
+		s.lastSweep = time.Now().Add(-time.Hour)
+		s.mu.Unlock()
+
+		_, _, err := s.Incr(ctx, "req", "1.2.3.4", window)
+		require.NoError(t, err)
+		time.Sleep(window)
+	}
+
+	s.mu.Lock()
+	n := len(s.buckets)
+	s.mu.Unlock()
+	assert.LessOrEqual(t, n, 5,
+		"expired buckets must be reclaimed; got %d live buckets for one key", n)
+}
+
+// TestCounterStore_SweepPreservesLiveCounts ensures reclamation never
+// discards a bucket that is still inside its window - that would silently
+// reset a rate limit mid-flight.
+func TestCounterStore_SweepPreservesLiveCounts(t *testing.T) {
+	s := NewCounterStore()
+	defer s.Close()
+	ctx := context.Background()
+	const window = time.Hour
+
+	for i := 0; i < 3; i++ {
+		s.mu.Lock()
+		s.lastSweep = time.Now().Add(-time.Hour)
+		s.mu.Unlock()
+		_, _, err := s.Incr(ctx, "req", "1.2.3.4", window)
+		require.NoError(t, err)
+	}
+
+	got, err := s.Get(ctx, "req", "1.2.3.4", window)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), got, "sweeping must not drop a bucket still in window")
+}
