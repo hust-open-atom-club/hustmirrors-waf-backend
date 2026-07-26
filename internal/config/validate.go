@@ -59,9 +59,9 @@ func Validate(c *Config) error {
 	}
 
 	switch c.Storage.Driver {
-	case "memory", "postgres":
+	case "memory", "postgres", "redis":
 	default:
-		e.add("storage.driver must be one of: memory, postgres (got %q)", c.Storage.Driver)
+		e.add("storage.driver must be one of: memory, postgres, redis (got %q)", c.Storage.Driver)
 	}
 	switch c.Storage.CounterDriver {
 	case "memory", "redis":
@@ -71,6 +71,9 @@ func Validate(c *Config) error {
 
 	if c.Storage.Driver == "postgres" && c.Storage.Postgres.DSN == "" {
 		e.add("storage.postgres.dsn is required when storage.driver=postgres")
+	}
+	if c.Storage.Driver == "redis" && c.Storage.Redis.Addr == "" {
+		e.add("storage.redis.addr is required when storage.driver=redis")
 	}
 
 	if c.Pow.TokenParam == "" {

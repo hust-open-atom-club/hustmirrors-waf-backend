@@ -121,6 +121,15 @@ func (s *UsageStore) Get(ctx context.Context, id string) (*storage.UsageRecord, 
 	return r, nil
 }
 
+// CleanupExpired is intentionally a no-op.
+//
+// Every usage key is written with a TTL of (expires_at - now + grace) by the
+// consume Lua script, so Redis evicts records on its own. Scanning the
+// keyspace to delete them early would cost an O(N) SCAN on a hot instance to
+// reclaim memory that is already scheduled for release.
+//
+// Returning (0, nil) is therefore accurate: this driver removed nothing
+// because there was nothing for it to remove.
 func (s *UsageStore) CleanupExpired(_ context.Context, _ int64) (int, error) {
 	return 0, nil
 }
@@ -133,4 +142,8 @@ func (s *UsageStore) usageKey(id string) string {
 	return s.keyPrefix + ":pow:usage:" + id
 }
 
+// Note: this driver deliberately does NOT implement storage.ActiveCounter.
+// Counting live usage records would require a full SCAN of the keyspace on
+// every cleanup tick. The storage_active_signatures gauge is therefore not
+// populated when storage.driver=redis.
 var _ storage.UsageStore = (*UsageStore)(nil)

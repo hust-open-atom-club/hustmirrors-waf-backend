@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -148,6 +149,57 @@ func TestBuild_BadExcludedPathRegexIsFatal(t *testing.T) {
 	_, err = Build(context.Background(), cfg)
 	require.Error(t, err, "an uncompilable excluded_paths regex must not start the service")
 	assert.Contains(t, err.Error(), "excluded_paths")
+}
+
+// TestBuild_RedisUsageDriver covers storage.driver=redis end to end. The
+// redis UsageStore was fully implemented and tested but unreachable: config
+// validation rejected the driver, and buildStorage only constructed it under
+// a condition that could never hold.
+func TestBuild_RedisUsageDriver(t *testing.T) {
+	mr := miniredis.RunT(t)
+
+	path := writeTestConfig(t)
+	cfg, err := config.Load(path)
+	require.NoError(t, err)
+	cfg.Storage.Driver = "redis"
+	cfg.Storage.CounterDriver = "redis"
+	cfg.Storage.Redis.Addr = mr.Addr()
+	require.NoError(t, config.Validate(cfg), "redis must be an accepted storage.driver")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a, err := Build(ctx, cfg)
+	require.NoError(t, err)
+	defer func() {
+		sctx, sCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer sCancel()
+		_ = a.Shutdown(sctx)
+	}()
+
+	req := httptest.NewRequest(http.MethodGet, "/verify_pow", nil)
+	req.Header.Set("X-Original-URI", "/ubuntu.iso")
+	req.Header.Set("X-Real-IP", "1.2.3.4")
+	rec := httptest.NewRecorder()
+	a.mainSrv.Echo().ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Equal(t, "missing_token_or_sign", rec.Header().Get("X-Pow-Error"))
+}
+
+// TestBuild_RedisUsageDriver_UnreachableIsFatal pins the asymmetry between
+// the two redis roles. Counters may silently degrade to memory, but usage
+// records are authoritative - falling back would drop the max_uses cap and
+// let every generic token be replayed without limit.
+func TestBuild_RedisUsageDriver_UnreachableIsFatal(t *testing.T) {
+	path := writeTestConfig(t)
+	cfg, err := config.Load(path)
+	require.NoError(t, err)
+	cfg.Storage.Driver = "redis"
+	// Port 1 is reserved and never listening.
+	cfg.Storage.Redis.Addr = "127.0.0.1:1"
+
+	_, err = Build(context.Background(), cfg)
+	require.Error(t, err, "an unreachable redis must not silently degrade the usage store")
+	assert.Contains(t, err.Error(), "redis")
 }
 
 func TestBuild_RiskControlEnabled(t *testing.T) {

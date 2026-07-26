@@ -102,7 +102,15 @@ protection:
     - "^/.+/repomd\\.xml$"
 
 storage:
-  # memory | postgres
+  # Where generic-mode usage records live: memory | postgres | redis
+  #
+  # memory   - single instance only; all usage state is lost on restart.
+  # postgres - durable, and the only driver that can report
+  #            storage_active_signatures.
+  # redis    - shared across instances; records expire via TTL rather than
+  #            an explicit cleanup pass. If Redis is unreachable at startup
+  #            the service refuses to boot, because falling back to memory
+  #            would silently drop the max_uses cap.
   driver: "memory"
   # memory | redis
   counter_driver: "memory"

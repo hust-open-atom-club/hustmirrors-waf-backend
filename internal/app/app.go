@@ -344,6 +344,29 @@ func buildStorage(ctx context.Context, cfg *config.Config, m *metrics.Container,
 		pgPool       *pgxpool.Pool
 	)
 
+	// The Redis client is shared by the usage store and the counter store,
+	// so it is opened once up front if either driver asks for it.
+	needRedis := cfg.Storage.Driver == "redis" || cfg.Storage.CounterDriver == "redis"
+	if needRedis {
+		redisClient = redis.NewClient(&redis.Options{
+			Addr:     cfg.Storage.Redis.Addr,
+			Password: cfg.Storage.Redis.Password,
+			DB:       cfg.Storage.Redis.DB,
+		})
+		if err := redisClient.Ping(ctx).Err(); err != nil {
+			_ = redisClient.Close()
+			redisClient = nil
+			// Counters are advisory - degrading them to in-memory only costs
+			// accuracy across restarts. Usage records are authoritative: the
+			// max_uses cap is the entire point of generic mode, so silently
+			// falling back would let every token be replayed indefinitely.
+			if cfg.Storage.Driver == "redis" {
+				return nil, nil, nil, nil, fmt.Errorf("app: connect redis for usage store: %w", err)
+			}
+			logger.Warn(ctx, "redis ping failed; falling back to memory counter store", logging.Err(err))
+		}
+	}
+
 	switch cfg.Storage.Driver {
 	case "memory":
 		usageStore = storage.InstrumentUsage("memory", m, memstore.NewUsageStore())
@@ -354,30 +377,27 @@ func buildStorage(ctx context.Context, cfg *config.Config, m *metrics.Container,
 			MaxIdleConns: int32(cfg.Storage.Postgres.MaxIdleConns),
 		})
 		if err != nil {
+			if redisClient != nil {
+				_ = redisClient.Close()
+			}
 			return nil, nil, nil, nil, fmt.Errorf("app: open postgres pool: %w", err)
 		}
 		pgPool = pool
 		usageStore = storage.InstrumentUsage("postgres", m, pgstore.NewUsageStoreFromPool(pool))
+	case "redis":
+		usageStore = storage.InstrumentUsage("redis", m,
+			redisstore.NewUsageStore(redisClient, cfg.Storage.Redis.KeyPrefix))
 	}
 
 	switch cfg.Storage.CounterDriver {
 	case "memory":
-		if counterStore == nil {
-			counterStore = storage.InstrumentCounter("memory", m, memstore.NewCounterStore())
-		}
+		counterStore = storage.InstrumentCounter("memory", m, memstore.NewCounterStore())
 	case "redis":
-		redisClient = redis.NewClient(&redis.Options{
-			Addr:     cfg.Storage.Redis.Addr,
-			Password: cfg.Storage.Redis.Password,
-			DB:       cfg.Storage.Redis.DB,
-		})
-		if err := redisClient.Ping(ctx).Err(); err != nil {
-			logger.Warn(ctx, "redis ping failed; falling back to memory counter store", logging.Err(err))
-			counterStore = storage.InstrumentCounter("memory", m, memstore.NewCounterStore())
-			_ = redisClient.Close()
-			redisClient = nil
+		if redisClient != nil {
+			counterStore = storage.InstrumentCounter("redis", m,
+				redisstore.NewCounterStore(redisClient, cfg.Storage.Redis.KeyPrefix))
 		} else {
-			counterStore = storage.InstrumentCounter("redis", m, redisstore.NewCounterStore(redisClient, cfg.Storage.Redis.KeyPrefix))
+			counterStore = storage.InstrumentCounter("memory", m, memstore.NewCounterStore())
 		}
 	}
 
