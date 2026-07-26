@@ -155,6 +155,11 @@ func (e *ValidationError) checkRiskControl(rc RiskControlConfig) {
 					e.add("risk_control.chains.%s.rules[%d]: JUMP chain %q does not exist", chainName, i, rule.Chain)
 				}
 			}
+			if rule.Match.RiskScoreGte != nil {
+				e.add("risk_control.chains.%s.rules[%d]: match.risk_score_gte is not supported; "+
+					"no component populates a risk score, so this rule could never match",
+					chainName, i)
+			}
 			if rule.Match.Counter != nil {
 				if rule.Match.Counter.Name == "" {
 					e.add("risk_control.chains.%s.rules[%d]: counter.name is required", chainName, i)

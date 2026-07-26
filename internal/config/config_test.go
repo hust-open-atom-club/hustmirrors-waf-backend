@@ -195,6 +195,32 @@ func TestValidate_RiskControlCounterMissing(t *testing.T) {
 	assert.Contains(t, err.Error(), `counter "nope" is not defined`)
 }
 
+func TestValidate_RiskScoreGteIsRejected(t *testing.T) {
+	// Nothing in the request pipeline populates a risk score, so a rule
+	// using risk_score_gte would compile fine and then silently never
+	// match. Validation must surface that instead of failing open.
+	threshold := 50
+	c := &Config{}
+	applyDefaults(c)
+	c.Pow.Modes.IPBound.Enabled = true
+	c.RiskControl.Enabled = true
+	c.RiskControl.Chains = map[string]ChainConfig{
+		"INPUT": {
+			Policy: PolicyConfig{Target: "ACCEPT", Reason: "ok"},
+			Rules: []RuleConfig{
+				{
+					Name:   "block high risk",
+					Match:  MatchConfig{RiskScoreGte: &threshold},
+					Target: "REJECT", Reason: "x",
+				},
+			},
+		},
+	}
+	err := Validate(c)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "risk_score_gte is not supported")
+}
+
 func TestValidate_GoodConfig_NoError(t *testing.T) {
 	c := &Config{}
 	applyDefaults(c)

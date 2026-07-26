@@ -143,7 +143,10 @@ type MatchConfig struct {
 	IsProtected     *bool          `mapstructure:"is_protected"`
 	IsRangeRequest  *bool          `mapstructure:"is_range_request"`
 	Counter         *CounterMatch  `mapstructure:"counter"`
-	RiskScoreGte    *int           `mapstructure:"risk_score_gte"`
+	// RiskScoreGte is retained purely so validation can reject configs
+	// that use it. Nothing populates a risk score, so a rule with this
+	// field set would silently never match. See checkRiskControl.
+	RiskScoreGte *int `mapstructure:"risk_score_gte"`
 }
 
 type CounterMatch struct {

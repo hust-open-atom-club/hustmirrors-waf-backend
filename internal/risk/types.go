@@ -14,11 +14,8 @@ type RequestContext struct {
 	// PowMode is empty when no token was provided, otherwise "ip_bound"
 	// or "generic".
 	PowMode     string
-	FileExt     string
 	IsProtected bool
 	IsRangeRequest bool
-	// RiskScore is the optional ML-derived risk score; 0 means unset.
-	RiskScore int
 	// Counters is populated by the engine during evaluation when a rule's
 	// Match.Counter condition is encountered.
 	Counters CounterResolver

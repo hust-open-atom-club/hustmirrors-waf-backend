@@ -61,7 +61,6 @@ func compileRule(rc config.RuleConfig) (Rule, error) {
 		IsProtected:    rc.Match.IsProtected,
 		IsRangeRequest: rc.Match.IsRangeRequest,
 		Counter:        convertCounter(rc.Match.Counter),
-		RiskScoreGte:   rc.Match.RiskScoreGte,
 	})
 	if err != nil {
 		return Rule{}, err

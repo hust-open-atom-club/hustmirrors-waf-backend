@@ -31,7 +31,6 @@ type MatchConfig struct {
 	IsProtected    *bool
 	IsRangeRequest *bool
 	Counter        *CounterMatch
-	RiskScoreGte   *int
 }
 
 type CounterMatch struct {
@@ -112,9 +111,6 @@ func CompileMatcher(m MatchConfig) (Matcher, error) {
 	}
 	if m.Counter != nil {
 		parts = append(parts, counterMatcher{c: *m.Counter})
-	}
-	if m.RiskScoreGte != nil {
-		parts = append(parts, riskScoreMatcher{threshold: *m.RiskScoreGte})
 	}
 	if len(parts) == 0 {
 		return matchAll{}, nil
@@ -230,10 +226,6 @@ func (m counterMatcher) Match(ctx *RequestContext) bool {
 	return compareCounter(v, m.c.Op, m.c.Value)
 }
 
-type riskScoreMatcher struct{ threshold int }
-
-func (m riskScoreMatcher) Match(ctx *RequestContext) bool { return ctx.RiskScore >= m.threshold }
-
 type andMatcher struct{ parts []Matcher }
 
 func (m andMatcher) Match(ctx *RequestContext) bool {
@@ -276,6 +268,5 @@ var (
 	_ Matcher = powModeMatcher{}
 	_ Matcher = boolMatcher{}
 	_ Matcher = counterMatcher{}
-	_ Matcher = riskScoreMatcher{}
 	_ Matcher = andMatcher{}
 )
