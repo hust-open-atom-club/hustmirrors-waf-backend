@@ -79,17 +79,38 @@ func (s *Server) healthz(c echov4.Context) error {
 // whoami returns the caller's IP as this service sees it.
 //
 // The ip_bound PoW mode requires the client to embed its own public IP in
-// the token, and that IP must match what the backend observes. Asking a
-// third-party service (api.ipify.org) is unreliable and can disagree with
-// us when the client is dual-stack or behind a different egress path, so
-// the frontend asks the origin it is actually going to be verified by.
+// the token, and that IP must match what /verify_pow observes. Asking a
+// third-party service is unreliable and can disagree with us when the
+// client is dual-stack or behind a different egress path, so the frontend
+// asks the origin it is actually going to be verified by.
 //
-// Cache-Control is set explicitly: a cached response here would hand the
+// This deliberately reads X-Real-IP only, exactly as verifyPow does,
+// rather than falling back to X-Forwarded-For or RemoteAddr. A fallback
+// would paper over a proxy that is not sending X-Real-IP: the client
+// would receive a plausible address, mint a token from it, and then be
+// rejected by /verify_pow with no indication of why. Reporting the
+// misconfiguration here instead makes the two endpoints fail together.
+//
+// Cache-Control is set explicitly: a cached response would hand the
 // browser a stale IP and produce ip_mismatch denials that are hard to
 // diagnose.
 func (s *Server) whoami(c echov4.Context) error {
-	c.Response().Header().Set("Cache-Control", "no-store")
-	return c.JSON(http.StatusOK, map[string]string{"ip": clientIP(c)})
+	h := c.Response().Header()
+	h.Set("Cache-Control", "no-store")
+
+	ip := c.Request().Header.Get("X-Real-IP")
+	if ip == "" {
+		if s.logger != nil {
+			s.logger.Error(c.Request().Context(),
+				"X-Real-IP is empty on /whoami; ip_bound tokens cannot be minted or verified. "+
+					"Check that Nginx sets proxy_set_header X-Real-IP on both the /whoami "+
+					"and auth_request locations")
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "missing_real_ip",
+		})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"ip": ip})
 }
 
 func (s *Server) readyz(c echov4.Context) error {
