@@ -2,6 +2,7 @@ package echo
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
 	"strings"
 	"time"
@@ -75,6 +76,13 @@ func timeoutMiddleware(read, write time.Duration) echov4.MiddlewareFunc {
 	}
 }
 
+// adminAuthMiddleware builds the auth gate for the admin API.
+//
+// Unlike pow.CompareSign - which compares a hash both sides can derive -
+// these credentials are real secrets, so all comparisons use
+// subtle.ConstantTimeCompare. A short-circuiting != leaks how many leading
+// bytes of a guess were correct, which turns an offline brute force into a
+// far cheaper byte-at-a-time search.
 func adminAuthMiddleware(cfg config.AdminConfig) echov4.MiddlewareFunc {
 	switch cfg.Auth.Type {
 	case "token":
@@ -85,7 +93,7 @@ func adminAuthMiddleware(cfg config.AdminConfig) echov4.MiddlewareFunc {
 					return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "admin token not configured"})
 				}
 				got := bearerToken(c.Request().Header.Get("Authorization"))
-				if got == "" || got != expected {
+				if got == "" || !secureEqual(got, expected) {
 					return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid admin token"})
 				}
 				return next(c)
@@ -96,7 +104,11 @@ func adminAuthMiddleware(cfg config.AdminConfig) echov4.MiddlewareFunc {
 		return func(next echov4.HandlerFunc) echov4.HandlerFunc {
 			return func(c echov4.Context) error {
 				u, p, ok := c.Request().BasicAuth()
-				if !ok || u != expectedUser || p != expectedPass {
+				// Both comparisons run unconditionally: short-circuiting on
+				// the username would reveal whether it exists.
+				userOK := secureEqual(u, expectedUser)
+				passOK := secureEqual(p, expectedPass)
+				if !ok || !userOK || !passOK {
 					c.Response().Header().Set("WWW-Authenticate", `Basic realm="mirrors-waf-admin"`)
 					return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 				}
@@ -104,9 +116,18 @@ func adminAuthMiddleware(cfg config.AdminConfig) echov4.MiddlewareFunc {
 			}
 		}
 	case "none", "":
+		// Reachable only when the operator wrote auth.type: none, or left
+		// admin disabled. Config validation rejects an enabled admin API
+		// without explicit auth, so this is not a silent open door.
 		return func(next echov4.HandlerFunc) echov4.HandlerFunc { return next }
 	}
 	return func(next echov4.HandlerFunc) echov4.HandlerFunc { return next }
+}
+
+// secureEqual compares two secrets in constant time with respect to their
+// contents. Length is not hidden, which is standard and acceptable here.
+func secureEqual(got, want string) bool {
+	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }
 
 func adminCIDRMiddleware(cfg config.AdminConfig) echov4.MiddlewareFunc {

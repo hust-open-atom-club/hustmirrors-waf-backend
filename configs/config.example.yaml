@@ -239,7 +239,12 @@ admin:
   enabled: false
   listen: "127.0.0.1:8081"
   auth:
-    type: "token"                 # token | basic | none
+    # token | basic | none. Required when enabled=true - an omitted type is
+    # rejected rather than silently defaulting to unauthenticated.
+    #
+    # "none" is only accepted when the listener is confined: either a
+    # loopback bind or a non-empty allow_cidrs.
+    type: "token"
     token_file: "/etc/mirrors-waf/admin.token"
     # Alternatively, set the token inline:
     # token: "changeme"

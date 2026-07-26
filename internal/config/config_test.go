@@ -266,3 +266,61 @@ func TestApplyDefaults_CleanupCanBeExplicitlyDisabled(t *testing.T) {
 	require.NotNil(t, c.Cleanup.Enabled)
 	assert.False(t, *c.Cleanup.Enabled, "an explicit false must be preserved")
 }
+
+// TestValidate_AdminAuthMustBeExplicit covers a config that silently
+// exposed the admin API. auth.type shares a switch arm with "none", so an
+// omitted key produced a pass-through middleware: rule.preview and
+// config.validate were reachable with no credentials at all.
+func TestValidate_AdminAuthMustBeExplicit(t *testing.T) {
+	c := &Config{}
+	applyDefaults(c)
+	c.Pow.Modes.IPBound.Enabled = true
+	c.Admin.Enabled = true
+	c.Admin.Listen = "0.0.0.0:8081"
+	c.Admin.Auth.Type = "" // operator omitted it
+
+	err := Validate(c)
+	require.Error(t, err, "an enabled admin API with no auth.type must be rejected")
+	assert.Contains(t, err.Error(), "admin.auth.type must be set")
+}
+
+// TestValidate_AdminNoneRequiresConfinedListener allows auth.type=none
+// only where it is defensible: a loopback bind or an explicit allow-list.
+func TestValidate_AdminNoneRequiresConfinedListener(t *testing.T) {
+	base := func() *Config {
+		c := &Config{}
+		applyDefaults(c)
+		c.Pow.Modes.IPBound.Enabled = true
+		c.Admin.Enabled = true
+		c.Admin.Auth.Type = "none"
+		return c
+	}
+
+	t.Run("public bind is rejected", func(t *testing.T) {
+		c := base()
+		c.Admin.Listen = "0.0.0.0:8081"
+		err := Validate(c)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires admin.listen to be loopback")
+	})
+
+	t.Run("bare port is rejected", func(t *testing.T) {
+		// ":8081" binds every interface; it must not read as loopback.
+		c := base()
+		c.Admin.Listen = ":8081"
+		require.Error(t, Validate(c))
+	})
+
+	t.Run("loopback is accepted", func(t *testing.T) {
+		c := base()
+		c.Admin.Listen = "127.0.0.1:8081"
+		assert.NoError(t, Validate(c))
+	})
+
+	t.Run("allow_cidrs permits a wider bind", func(t *testing.T) {
+		c := base()
+		c.Admin.Listen = "0.0.0.0:8081"
+		c.Admin.AllowCIDRs = []string{"10.0.0.0/8"}
+		assert.NoError(t, Validate(c))
+	})
+}

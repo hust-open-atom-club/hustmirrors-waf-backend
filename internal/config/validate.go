@@ -206,7 +206,20 @@ func (e *ValidationError) checkAdmin(a AdminConfig) {
 		if a.Auth.Username == "" || a.Auth.Password == "" {
 			e.add("admin.auth.username/password required when type=basic")
 		}
-	case "none", "":
+	case "":
+		// An omitted auth.type used to fall through to the "none" handler,
+		// leaving the admin API - which can reload rules and read config -
+		// completely unauthenticated. Require the operator to say so.
+		e.add("admin.auth.type must be set when admin.enabled=true " +
+			"(use \"none\" only if the listener is confined to localhost or a trusted network)")
+	case "none":
+		// Explicitly unauthenticated. Only defensible when the listener is
+		// not reachable from untrusted networks, so insist on either a
+		// loopback bind or a CIDR allow-list.
+		if !isLoopbackListen(a.Listen) && len(a.AllowCIDRs) == 0 {
+			e.add("admin.auth.type=none requires admin.listen to be loopback "+
+				"or admin.allow_cidrs to be set (listen=%q)", a.Listen)
+		}
 	default:
 		e.add("admin.auth.type %q is not supported", a.Auth.Type)
 	}
@@ -215,6 +228,25 @@ func (e *ValidationError) checkAdmin(a AdminConfig) {
 			e.add("admin.allow_cidrs[%d]: %q is not a valid CIDR", i, cidr)
 		}
 	}
+}
+
+// isLoopbackListen reports whether a listen address is confined to the
+// local host. A bare port or an empty host (":8081", "8081") binds all
+// interfaces and is therefore not loopback.
+func isLoopbackListen(listen string) bool {
+	host, _, err := net.SplitHostPort(listen)
+	if err != nil {
+		// Not host:port - treat as non-loopback rather than guessing.
+		return false
+	}
+	if host == "" {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // policy=true means we are validating a chain policy target
