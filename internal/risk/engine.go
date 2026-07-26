@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 )
 
+// Engine evaluates rule chains. chains is built once by NewEngine and
+// never mutated afterwards, so Evaluate is safe for concurrent use without
+// any locking. Reintroduce a mutex here only if hot-reload is added.
 type Engine struct {
 	chains ChainMap
-	mu     sync.RWMutex
 }
 
 var ErrNoChains = errors.New("risk: no chains configured")
@@ -34,27 +35,12 @@ type evalState struct {
 // Evaluate walks the "INPUT" chain and returns the resulting Decision
 // along with a per-step trace. When ctx.Counters is nil, counter-based
 // matchers evaluate to false.
-func (e *Engine) Evaluate(_ context.Context, ctx *RequestContext) (Result, error) {
-	if ctx == nil {
-		ctx = &RequestContext{}
-	}
-	if ctx.Counters == nil {
-		ctx.Counters = NoopCounterResolver
-	}
-	r := Result{Trace: []TraceStep{}}
-	marks := []string{}
-	st := evalState{trace: &r.Trace, marks: &marks, visited: make(map[string]int, len(e.chains))}
-	d, err := e.evalChain("INPUT", ctx, st)
-	if err != nil {
-		return r, err
-	}
-	d.Marks = marks
-	r.Decision = d
-	return r, nil
+func (e *Engine) Evaluate(ctx context.Context, req *RequestContext) (Result, error) {
+	return e.EvaluateWithEntry(ctx, req, "INPUT")
 }
 
 // EvaluateWithEntry is like Evaluate but lets the caller pick the entry
-// chain name.
+// chain name. An empty entry defaults to "INPUT".
 func (e *Engine) EvaluateWithEntry(_ context.Context, ctx *RequestContext, entry string) (Result, error) {
 	if entry == "" {
 		entry = "INPUT"
@@ -80,8 +66,6 @@ func (e *Engine) EvaluateWithEntry(_ context.Context, ctx *RequestContext, entry
 // lookupChain returns the chain with the given name, doing a
 // case-insensitive comparison because viper lowercases YAML keys.
 func (e *Engine) lookupChain(name string) (*Chain, bool) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
 	if c, ok := e.chains[name]; ok {
 		return c, true
 	}
@@ -92,11 +76,6 @@ func (e *Engine) lookupChain(name string) (*Chain, bool) {
 		}
 	}
 	return nil, false
-}
-
-func (e *Engine) hasChain(name string) bool {
-	_, ok := e.lookupChain(name)
-	return ok
 }
 
 // evalChain walks a single chain. visited prevents infinite recursion via
