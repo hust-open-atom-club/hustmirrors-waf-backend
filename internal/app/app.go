@@ -73,8 +73,14 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 
 	clk := clock.New()
 
-	protected := buildProtectedMatcher(cfg)
-	excluded := buildExcludedMatcher(cfg)
+	protected, err := buildProtectedMatcher(cfg)
+	if err != nil {
+		return nil, err
+	}
+	excluded, err := buildExcludedMatcher(cfg)
+	if err != nil {
+		return nil, err
+	}
 	matcherComposite := matcher.NewComposite(protected, excluded)
 
 	usageStore, counterStore, redisClient, storageCloser, err := buildStorage(ctx, cfg, m, logger)
@@ -291,28 +297,37 @@ func (a *App) refreshActiveGauge(ctx context.Context, store storage.UsageStore) 
 	a.metrics.ActiveSignatures.Set(float64(n))
 }
 
-func buildProtectedMatcher(cfg *config.Config) matcher.Matcher {
+// buildProtectedMatcher builds the "should this path require PoW" matcher.
+//
+// A regex that fails to compile is fatal rather than skipped: silently
+// degrading to extension-only matching would leave every regex-protected
+// path unguarded, which is exactly the failure an operator would not
+// notice. Config validation rejects bad patterns first, so reaching the
+// error path means validation and this function have drifted apart.
+func buildProtectedMatcher(cfg *config.Config) (matcher.Matcher, error) {
 	ext := matcher.NewExtensionMatcher(cfg.Protection.ProtectedExtensions)
 	if len(cfg.Protection.ProtectedPaths) == 0 {
-		return ext
+		return ext, nil
 	}
 	regex, err := matcher.NewRegexMatcher(cfg.Protection.ProtectedPaths)
 	if err != nil {
-	// Config validation should have caught this; fall back to ext-only.
-	return ext
+		return nil, fmt.Errorf("app: compile protection.protected_paths: %w", err)
 	}
-	return unionMatcher{a: ext, b: regex}
+	return unionMatcher{a: ext, b: regex}, nil
 }
 
-func buildExcludedMatcher(cfg *config.Config) matcher.Matcher {
+// buildExcludedMatcher builds the exclusion matcher. As above, a bad
+// pattern is fatal: returning nil would drop the exclusion list entirely
+// and subject paths meant to be exempt to PoW.
+func buildExcludedMatcher(cfg *config.Config) (matcher.Matcher, error) {
 	if len(cfg.Protection.ExcludedPaths) == 0 {
-		return nil
+		return nil, nil
 	}
 	regex, err := matcher.NewRegexMatcher(cfg.Protection.ExcludedPaths)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("app: compile protection.excluded_paths: %w", err)
 	}
-	return regex
+	return regex, nil
 }
 
 type unionMatcher struct{ a, b matcher.Matcher }

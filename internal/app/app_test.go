@@ -122,6 +122,34 @@ func TestBuild_MissingConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "config is nil")
 }
 
+// TestBuild_BadProtectedPathRegexIsFatal covers the case where a regex
+// reaches Build without having been validated. Previously this degraded to
+// extension-only matching, leaving every regex-protected path unguarded
+// while the service reported a clean startup.
+func TestBuild_BadProtectedPathRegexIsFatal(t *testing.T) {
+	path := writeTestConfig(t)
+	cfg, err := config.Load(path)
+	require.NoError(t, err)
+	cfg.Protection.ProtectedPaths = []string{"^/ubuntu/(unclosed"}
+
+	_, err = Build(context.Background(), cfg)
+	require.Error(t, err, "an uncompilable protected_paths regex must not start the service")
+	assert.Contains(t, err.Error(), "protected_paths")
+}
+
+// TestBuild_BadExcludedPathRegexIsFatal is the mirror case: silently
+// dropping the exclusion list would subject exempt paths to PoW.
+func TestBuild_BadExcludedPathRegexIsFatal(t *testing.T) {
+	path := writeTestConfig(t)
+	cfg, err := config.Load(path)
+	require.NoError(t, err)
+	cfg.Protection.ExcludedPaths = []string{"*bad"}
+
+	_, err = Build(context.Background(), cfg)
+	require.Error(t, err, "an uncompilable excluded_paths regex must not start the service")
+	assert.Contains(t, err.Error(), "excluded_paths")
+}
+
 func TestBuild_RiskControlEnabled(t *testing.T) {
 	path := writeTestConfig(t)
 	cfg, err := config.Load(path)
