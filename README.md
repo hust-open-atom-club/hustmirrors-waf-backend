@@ -4,7 +4,7 @@
 
 [![Go](https://img.shields.io/badge/Go-1.24+-00ADD8)](https://go.dev/)
 [![Echo](https://img.shields.io/badge/Echo-v4-00ADD8)](https://echo.labstack.com/)
-[![License](https://img.shields.io/badge/license-MIT-blue)]()
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 ---
 
@@ -342,4 +342,4 @@ go test -tags=benchmark -bench=. ./internal/app/...  # 压测
 
 ## 许可证
 
-MIT
+[MIT](LICENSE)
