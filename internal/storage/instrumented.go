@@ -8,23 +8,21 @@ import (
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/metrics"
 )
 
-// ActiveCounter is an optional capability: a UsageStore that can cheaply
-// report how many usage records are currently live. memory and postgres
-// implement it; drivers where the count would require a full keyspace
-// scan (redis) deliberately do not.
+// ActiveCounter is optional: a UsageStore that can cheaply count live
+// records. memory and postgres implement it; redis can't without a full
+// keyspace scan.
 type ActiveCounter interface {
 	CountActive(ctx context.Context) (int64, error)
 }
 
-// InstrumentUsage wraps a UsageStore so every operation emits the
-// storage_operations_total and storage_latency_seconds metrics under the
-// given driver label. A nil container returns the store unchanged.
+// InstrumentUsage wraps a UsageStore to emit storage_operations_total and
+// storage_latency_seconds under the given driver label. Nil container
+// returns the store unchanged.
 //
-// ActiveCounter is an optional capability, so the wrapper must not claim
-// to implement it when the wrapped store does not: callers detect support
-// with a type assertion, and a decorator that always satisfies the
-// interface would turn "unsupported" from a compile-time-visible fact into
-// a failed call on every cleanup tick.
+// Returns a variant type when the wrapped store implements ActiveCounter,
+// so the type assertion callers use reports the truth. A wrapper that
+// always satisfied it would turn a static fact into a failed call on
+// every cleanup tick.
 func InstrumentUsage(driver string, m *metrics.Container, next UsageStore) UsageStore {
 	if m == nil || next == nil {
 		return next

@@ -6,7 +6,6 @@ package logging
 import (
 	"context"
 	"errors"
-	"io"
 	"os"
 
 	"go.uber.org/zap"
@@ -118,8 +117,6 @@ func (l *zapLogger) Sync() error {
 	}
 	return err
 }
-
-func stderrSink() io.Writer { return os.Stderr }
 
 type unknownFormatError struct{ format string }
 

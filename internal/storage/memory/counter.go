@@ -8,23 +8,20 @@ import (
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/storage"
 )
 
-// CounterStore implements storage.CounterStore using a fixed-window scheme:
-// the key includes a time-bucket index computed as now/window, so a counter
-// value covers a strict time window aligned to Unix epoch boundaries. Once
-// the window rolls over, counts from the previous window are not included.
+// CounterStore implements storage.CounterStore with fixed windows: the key
+// embeds a bucket index of now/window, so counts don't carry across a
+// rollover.
 //
 // Rolled-over buckets are unreachable but still resident, and the key space
-// is attacker-influenced (counters are typically keyed by client IP), so
-// they are swept periodically. Without that the map grows without bound
-// for the lifetime of the process: every new window mints fresh keys and
-// nothing ever removes the old ones.
+// is attacker-influenced (usually client IP), so they're swept. Without
+// that the map grows for the life of the process.
 type CounterStore struct {
 	mu      sync.Mutex
 	buckets map[string]*counterBucket
 	closed  bool
 
-	// lastSweep throttles the scan so a burst of Incr calls does not turn
-	// into a burst of full map walks.
+	// lastSweep throttles the scan so an Incr burst doesn't become a burst
+	// of full map walks.
 	lastSweep time.Time
 }
 
@@ -33,9 +30,7 @@ type counterBucket struct {
 	expiresAt time.Time
 }
 
-// sweepInterval bounds how often expired buckets are collected. Buckets
-// are cheap (~64 bytes), so trading a little residency for far fewer scans
-// is the right side of that tradeoff.
+// Buckets are ~64 bytes, so a little residency beats frequent scans.
 const sweepInterval = 30 * time.Second
 
 func NewCounterStore() *CounterStore {

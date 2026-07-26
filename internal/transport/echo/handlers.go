@@ -76,24 +76,15 @@ func (s *Server) healthz(c echov4.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// whoami returns the caller's IP as this service sees it.
+// whoami tells the caller what IP this service sees, so the PoW page can
+// mint ip_bound tokens without a third-party lookup that might report a
+// different address (dual-stack, alternate egress).
 //
-// The ip_bound PoW mode requires the client to embed its own public IP in
-// the token, and that IP must match what /verify_pow observes. Asking a
-// third-party service is unreliable and can disagree with us when the
-// client is dual-stack or behind a different egress path, so the frontend
-// asks the origin it is actually going to be verified by.
+// Reads X-Real-IP only, matching verifyPow. Falling back to
+// X-Forwarded-For would hand the client a plausible IP that /verify_pow
+// then rejects — better that both endpoints fail the same way.
 //
-// This deliberately reads X-Real-IP only, exactly as verifyPow does,
-// rather than falling back to X-Forwarded-For or RemoteAddr. A fallback
-// would paper over a proxy that is not sending X-Real-IP: the client
-// would receive a plausible address, mint a token from it, and then be
-// rejected by /verify_pow with no indication of why. Reporting the
-// misconfiguration here instead makes the two endpoints fail together.
-//
-// Cache-Control is set explicitly: a cached response would hand the
-// browser a stale IP and produce ip_mismatch denials that are hard to
-// diagnose.
+// no-store because a cached IP produces ip_mismatch denials.
 func (s *Server) whoami(c echov4.Context) error {
 	h := c.Response().Header()
 	h.Set("Cache-Control", "no-store")

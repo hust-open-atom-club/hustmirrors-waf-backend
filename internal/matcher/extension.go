@@ -2,16 +2,17 @@ package matcher
 
 import (
 	"strings"
-	"sync"
 )
 
 // ExtensionMatcher reports a path as protected when its suffix matches one
 // of the configured extensions. Matching is case-insensitive and treats
 // compound suffixes like ".tar.gz" by literal string suffix comparison.
+//
+// exts is built once by NewExtensionMatcher and never mutated, so
+// ShouldProtect is safe for concurrent use without locking.
 type ExtensionMatcher struct {
 	exts   []string
 	extSet map[string]struct{}
-	mu     sync.RWMutex
 }
 
 func NewExtensionMatcher(extensions []string) *ExtensionMatcher {
@@ -38,8 +39,6 @@ func (m *ExtensionMatcher) ShouldProtect(path string) bool {
 		return false
 	}
 	lower := strings.ToLower(path)
-	m.mu.RLock()
-	defer m.mu.RUnlock()
 	for _, e := range m.exts {
 		if strings.HasSuffix(lower, e) {
 			return true
@@ -48,9 +47,9 @@ func (m *ExtensionMatcher) ShouldProtect(path string) bool {
 	return false
 }
 
+// Extensions returns the normalised extension list. Used by tests and by
+// the admin API's config introspection.
 func (m *ExtensionMatcher) Extensions() []string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
 	out := make([]string, len(m.exts))
 	copy(out, m.exts)
 	return out

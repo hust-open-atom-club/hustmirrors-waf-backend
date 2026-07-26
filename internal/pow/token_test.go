@@ -344,13 +344,31 @@ func TestValidatePayload_RejectsCanonicalInjection(t *testing.T) {
 	}
 }
 
-func TestSaltAllowed(t *testing.T) {
-	assert.True(t, SaltAllowed("", nil, true))
-	assert.False(t, SaltAllowed("", nil, false))
-	assert.True(t, SaltAllowed("2025-demo", []string{"2025-demo"}, false))
-	assert.False(t, SaltAllowed("rogue", []string{"2025-demo"}, false))
-	// Case-insensitive
-	assert.True(t, SaltAllowed("2025-DEMO", []string{"2025-demo"}, false))
+// Salt matching is case-sensitive: salt goes verbatim into the canonical
+// input, so differing case is a different sign. The removed SaltAllowed
+// helper used EqualFold and contradicted this.
+func TestValidatePayload_SaltMatching(t *testing.T) {
+	base := func(salt string) *TokenPayload {
+		return &TokenPayload{
+			Version: 1, Mode: "generic", Algorithm: "sha256",
+			Path: "/a.iso", Timestamp: 1, ExpiresAt: 2,
+			Difficulty: 22, Counter: "c", Salt: salt,
+		}
+	}
+	opts := &ValidatorOptions{
+		AllowedModes:  []string{"generic"},
+		AllowedSalts:  []string{"2025-demo"},
+		MinDifficulty: 1, MaxDifficulty: 64,
+	}
+
+	assert.NoError(t, ValidatePayload(base("2025-demo"), opts))
+	assert.ErrorIs(t, ValidatePayload(base("2025-DEMO"), opts), ErrSaltInvalid)
+	assert.ErrorIs(t, ValidatePayload(base("rogue"), opts), ErrSaltInvalid)
+	assert.ErrorIs(t, ValidatePayload(base(""), opts), ErrSaltInvalid)
+
+	allowEmpty := *opts
+	allowEmpty.AllowEmptySalt = true
+	assert.NoError(t, ValidatePayload(base(""), &allowEmpty))
 }
 
 func TestMinimumSignForDifficulty(t *testing.T) {
