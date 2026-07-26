@@ -91,6 +91,13 @@ func (s *Server) Start(listen string) error {
 		Addr:              listen,
 		Handler:           s.echo,
 		ReadHeaderTimeout: 5 * time.Second,
+		// Every input this service reads arrives in headers
+		// (X-Original-URI, X-Original-Args, User-Agent), not the body, so
+		// middleware.BodyLimit bounds nothing that matters. Without an
+		// explicit cap Go allows 1 MB of headers per request, and the
+		// args header is parsed and the user agent is logged verbatim.
+		// 64 KB is far above any legitimate PoW token.
+		MaxHeaderBytes: 64 << 10,
 	}
 	if s.cfg.Server.ReadTimeout > 0 {
 		s.httpServer.ReadTimeout = s.cfg.Server.ReadTimeout

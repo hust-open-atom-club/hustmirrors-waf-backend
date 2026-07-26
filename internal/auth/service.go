@@ -125,10 +125,10 @@ func (s *Service) Verify(ctx context.Context, req AuthRequest) AuthResult {
 		start: s.clock.Now(),
 	}
 	vctx.logFields = []logging.Field{
-		logging.String("path", req.OriginalURI),
+		logging.String("path", truncateForLog(req.OriginalURI, maxLoggedFieldLen)),
 		logging.String("ip", s.maybeHashIP(req.RealIP)),
-		logging.String("method", req.OriginalMethod),
-		logging.String("user_agent", req.UserAgent),
+		logging.String("method", truncateForLog(req.OriginalMethod, 16)),
+		logging.String("user_agent", truncateForLog(req.UserAgent, maxLoggedFieldLen)),
 	}
 	// NOTE: the latency histogram is observed inside recordResult, not in a
 	// defer here, so that the "mode" label is populated. Every return path

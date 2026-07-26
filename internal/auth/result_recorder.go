@@ -9,6 +9,24 @@ import (
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/risk"
 )
 
+// maxLoggedFieldLen caps attacker-controlled strings written to the log.
+//
+// path and user_agent come straight from request headers. The JSON encoder
+// escapes them correctly, so this is not about log injection - it is about
+// volume: one request can otherwise write tens of kilobytes per line, and
+// an attacker choosing to do that on every request turns the log pipeline
+// into the cheapest way to exhaust disk or blow through an ingestion quota.
+const maxLoggedFieldLen = 512
+
+// truncateForLog shortens s and marks it, so a truncated value is never
+// mistaken for the real one during an investigation.
+func truncateForLog(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…(truncated)"
+}
+
 // verifyCtx bundles per-request state that recordResult needs.
 type verifyCtx struct {
 	req       AuthRequest
