@@ -116,7 +116,7 @@ func TestEngine_PolicyDefault(t *testing.T) {
 func TestEngine_JumpToUnknownChain_Errors(t *testing.T) {
 	chains := ChainMap{
 		"INPUT": {
-			Name: "INPUT",
+			Name:   "INPUT",
 			Policy: Policy{Target: TargetACCEPT, Reason: "fallback"},
 			Rules: []Rule{
 				{Name: "jump-bad", Match: matchAll{}, Target: TargetJUMP, Chain: "NOPE"},
@@ -218,10 +218,10 @@ func TestCounterKey(t *testing.T) {
 
 func TestCompareCounter(t *testing.T) {
 	cases := []struct {
-		v     int64
-		op    string
-		tgt   int64
-		want  bool
+		v    int64
+		op   string
+		tgt  int64
+		want bool
 	}{
 		{5, ">=", 5, true},
 		{5, ">", 5, false},
@@ -275,7 +275,7 @@ func TestFromConfig_Disabled(t *testing.T) {
 func newTestEngine(t *testing.T) *Engine {
 	t.Helper()
 	rc := config.RiskControlConfig{
-		Enabled: true,
+		Enabled:  true,
 		Counters: testCounters(),
 		Chains: map[string]config.ChainConfig{
 			"INPUT": {

@@ -11,20 +11,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/admin"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/auth"
-	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/config"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/clock"
+	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/config"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/logging"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/matcher"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/metrics"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/risk"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/storage"
-	pgstore "github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/storage/postgres"
 	memstore "github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/storage/memory"
+	pgstore "github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/storage/postgres"
 	redisstore "github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/storage/redis"
 	echo "github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/transport/echo"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/version"
@@ -130,9 +130,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 			cfg.Admin.Auth.Token = strings.TrimSpace(string(b))
 		}
 		adminSvc, err = admin.New(admin.Options{
-			Config:    cfg,
-			AuditLog:  admin.NopAuditLogger{},
-			Validator: admin.DefaultValidator{},
+			Config:     cfg,
+			AuditLog:   admin.NopAuditLogger{},
+			Validator:  admin.DefaultValidator{},
 			RiskEngine: riskEngine,
 		})
 		if err != nil {

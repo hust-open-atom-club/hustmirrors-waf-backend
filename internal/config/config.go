@@ -3,14 +3,14 @@ package config
 import "time"
 
 type Config struct {
-	Server       ServerConfig       `mapstructure:"server"`
-	Pow          PowConfig          `mapstructure:"pow"`
-	Protection   ProtectionConfig   `mapstructure:"protection"`
-	Storage      StorageConfig      `mapstructure:"storage"`
-	RiskControl  RiskControlConfig  `mapstructure:"risk_control"`
-	Admin        AdminConfig        `mapstructure:"admin"`
-	Logging      LoggingConfig      `mapstructure:"logging"`
-	Cleanup      CleanupConfig      `mapstructure:"cleanup"`
+	Server      ServerConfig      `mapstructure:"server"`
+	Pow         PowConfig         `mapstructure:"pow"`
+	Protection  ProtectionConfig  `mapstructure:"protection"`
+	Storage     StorageConfig     `mapstructure:"storage"`
+	RiskControl RiskControlConfig `mapstructure:"risk_control"`
+	Admin       AdminConfig       `mapstructure:"admin"`
+	Logging     LoggingConfig     `mapstructure:"logging"`
+	Cleanup     CleanupConfig     `mapstructure:"cleanup"`
 }
 
 type ServerConfig struct {
@@ -22,19 +22,19 @@ type ServerConfig struct {
 }
 
 type PowConfig struct {
-	Enabled   bool        `mapstructure:"enabled"`
-	DryRun    bool        `mapstructure:"dry_run"`
-	BypassAll bool        `mapstructure:"bypass_all"`
+	Enabled   bool `mapstructure:"enabled"`
+	DryRun    bool `mapstructure:"dry_run"`
+	BypassAll bool `mapstructure:"bypass_all"`
 
 	TokenParam string `mapstructure:"token_param"`
 	SignParam  string `mapstructure:"sign_param"`
 
-	MaxTokenLength int    `mapstructure:"max_token_length"`
-	MaxSignLength  int    `mapstructure:"max_sign_length"`
+	MaxTokenLength int `mapstructure:"max_token_length"`
+	MaxSignLength  int `mapstructure:"max_sign_length"`
 
-	Algorithm          string   `mapstructure:"algorithm"`
-	PublicSalt         string   `mapstructure:"public_salt"`
-	AllowEmptySalt     bool     `mapstructure:"allow_empty_salt"`
+	Algorithm            string   `mapstructure:"algorithm"`
+	PublicSalt           string   `mapstructure:"public_salt"`
+	AllowEmptySalt       bool     `mapstructure:"allow_empty_salt"`
 	AllowedPreviousSalts []string `mapstructure:"allowed_previous_salts"`
 
 	Modes ModesConfig `mapstructure:"modes"`
@@ -46,14 +46,14 @@ type ModesConfig struct {
 }
 
 type ModeConfig struct {
-	Enabled           bool   `mapstructure:"enabled"`
-	MinDifficulty     int    `mapstructure:"min_difficulty"`
-	MaxDifficulty     int    `mapstructure:"max_difficulty"`
-	MaxTTLSeconds     int    `mapstructure:"max_ttl_seconds"`
-	RequireIP         bool   `mapstructure:"require_ip"`
-	CountUsage        bool   `mapstructure:"count_usage"`
-	MaxUses           int    `mapstructure:"max_uses"`
-	CountHeadRequest  bool   `mapstructure:"count_head_request"`
+	Enabled          bool `mapstructure:"enabled"`
+	MinDifficulty    int  `mapstructure:"min_difficulty"`
+	MaxDifficulty    int  `mapstructure:"max_difficulty"`
+	MaxTTLSeconds    int  `mapstructure:"max_ttl_seconds"`
+	RequireIP        bool `mapstructure:"require_ip"`
+	CountUsage       bool `mapstructure:"count_usage"`
+	MaxUses          int  `mapstructure:"max_uses"`
+	CountHeadRequest bool `mapstructure:"count_head_request"`
 }
 
 type ProtectionConfig struct {
@@ -63,10 +63,10 @@ type ProtectionConfig struct {
 }
 
 type StorageConfig struct {
-	Driver        string             `mapstructure:"driver"`         // memory | postgres
-	CounterDriver string             `mapstructure:"counter_driver"` // memory | redis
-	Postgres      PostgresConfig     `mapstructure:"postgres"`
-	Redis         RedisConfig        `mapstructure:"redis"`
+	Driver        string         `mapstructure:"driver"`         // memory | postgres
+	CounterDriver string         `mapstructure:"counter_driver"` // memory | redis
+	Postgres      PostgresConfig `mapstructure:"postgres"`
+	Redis         RedisConfig    `mapstructure:"redis"`
 }
 
 type PostgresConfig struct {
@@ -84,13 +84,13 @@ type RedisConfig struct {
 
 // When Enabled is false the service runs only the base PoW verification logic.
 type RiskControlConfig struct {
-	Enabled  bool                      `mapstructure:"enabled"`
-	Counters map[string]CounterConfig  `mapstructure:"counters"`
-	Chains   map[string]ChainConfig    `mapstructure:"chains"`
+	Enabled  bool                     `mapstructure:"enabled"`
+	Counters map[string]CounterConfig `mapstructure:"counters"`
+	Chains   map[string]ChainConfig   `mapstructure:"chains"`
 }
 
 type CounterConfig struct {
-	Key     string            `mapstructure:"key"`     // ip | path | ...
+	Key     string            `mapstructure:"key"` // ip | path | ...
 	Window  time.Duration     `mapstructure:"window"`
 	When    CounterWhenConfig `mapstructure:"when"`
 	Storage string            `mapstructure:"storage"` // memory | redis
@@ -118,31 +118,31 @@ type PolicyConfig struct {
 
 // RuleConfig is a single rule within a chain.
 type RuleConfig struct {
-	Name      string        `mapstructure:"name"`
-	Match     MatchConfig   `mapstructure:"match"`
-	Target    string        `mapstructure:"target"`
-	Chain     string        `mapstructure:"chain"`     // for JUMP
-	Status    int           `mapstructure:"status"`
-	LimitRate string        `mapstructure:"limit_rate"`
-	Reason    string        `mapstructure:"reason"`
-	Mark      string        `mapstructure:"mark"`
+	Name      string      `mapstructure:"name"`
+	Match     MatchConfig `mapstructure:"match"`
+	Target    string      `mapstructure:"target"`
+	Chain     string      `mapstructure:"chain"` // for JUMP
+	Status    int         `mapstructure:"status"`
+	LimitRate string      `mapstructure:"limit_rate"`
+	Reason    string      `mapstructure:"reason"`
+	Mark      string      `mapstructure:"mark"`
 }
 
 // First non-empty match field wins; multiple non-empty fields are AND-ed
 // together (see risk/matcher.go).
 type MatchConfig struct {
-	PathRegex       string         `mapstructure:"path_regex"`
-	PathPrefix      string         `mapstructure:"path_prefix"`
-	ExtensionIn     []string       `mapstructure:"extension_in"`
-	MethodIn        []string       `mapstructure:"method_in"`
-	IPCIDRIn        []string       `mapstructure:"ip_cidr_in"`
-	UserAgentRegex  string         `mapstructure:"user_agent_regex"`
-	PowStatus       string         `mapstructure:"pow_status"`
-	PowStatusIn     []string       `mapstructure:"pow_status_in"`
-	PowMode         string         `mapstructure:"pow_mode"`
-	IsProtected     *bool          `mapstructure:"is_protected"`
-	IsRangeRequest  *bool          `mapstructure:"is_range_request"`
-	Counter         *CounterMatch  `mapstructure:"counter"`
+	PathRegex      string        `mapstructure:"path_regex"`
+	PathPrefix     string        `mapstructure:"path_prefix"`
+	ExtensionIn    []string      `mapstructure:"extension_in"`
+	MethodIn       []string      `mapstructure:"method_in"`
+	IPCIDRIn       []string      `mapstructure:"ip_cidr_in"`
+	UserAgentRegex string        `mapstructure:"user_agent_regex"`
+	PowStatus      string        `mapstructure:"pow_status"`
+	PowStatusIn    []string      `mapstructure:"pow_status_in"`
+	PowMode        string        `mapstructure:"pow_mode"`
+	IsProtected    *bool         `mapstructure:"is_protected"`
+	IsRangeRequest *bool         `mapstructure:"is_range_request"`
+	Counter        *CounterMatch `mapstructure:"counter"`
 	// RiskScoreGte is retained purely so validation can reject configs
 	// that use it. Nothing populates a risk score, so a rule with this
 	// field set would silently never match. See checkRiskControl.
@@ -151,29 +151,29 @@ type MatchConfig struct {
 
 type CounterMatch struct {
 	Name  string `mapstructure:"name"`
-	Op    string `mapstructure:"op"`    // >= | > | == | <= | <
+	Op    string `mapstructure:"op"` // >= | > | == | <= | <
 	Value int64  `mapstructure:"value"`
 }
 
 type AdminConfig struct {
-	Enabled   bool       `mapstructure:"enabled"`
-	Listen    string     `mapstructure:"listen"`
-	Auth      AuthConfig `mapstructure:"auth"`
-	AllowCIDRs []string  `mapstructure:"allow_cidrs"`
-	AuditLog  bool       `mapstructure:"audit_log"`
+	Enabled    bool       `mapstructure:"enabled"`
+	Listen     string     `mapstructure:"listen"`
+	Auth       AuthConfig `mapstructure:"auth"`
+	AllowCIDRs []string   `mapstructure:"allow_cidrs"`
+	AuditLog   bool       `mapstructure:"audit_log"`
 }
 
 type AuthConfig struct {
-	Type      string `mapstructure:"type"`       // token | basic | none
+	Type      string `mapstructure:"type"` // token | basic | none
 	TokenFile string `mapstructure:"token_file"`
-	Token     string `mapstructure:"token"`      // inline alternative to TokenFile
-	Username  string `mapstructure:"username"`   // for basic
-	Password  string `mapstructure:"password"`   // for basic
+	Token     string `mapstructure:"token"`    // inline alternative to TokenFile
+	Username  string `mapstructure:"username"` // for basic
+	Password  string `mapstructure:"password"` // for basic
 }
 
 type LoggingConfig struct {
-	Level     string `mapstructure:"level"`      // debug | info | warn | error
-	Format    string `mapstructure:"format"`     // json | console
+	Level     string `mapstructure:"level"`  // debug | info | warn | error
+	Format    string `mapstructure:"format"` // json | console
 	LogAccess bool   `mapstructure:"log_access"`
 	LogDenied bool   `mapstructure:"log_denied"`
 	HashIP    bool   `mapstructure:"hash_ip"`

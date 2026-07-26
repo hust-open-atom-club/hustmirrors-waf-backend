@@ -154,11 +154,11 @@ func decisionFromRule(chainName string, rule Rule) Decision {
 		status = defaultStatusCodeFor(rule.Target)
 	}
 	return Decision{
-		Target:    rule.Target,
+		Target:     rule.Target,
 		StatusCode: status,
-		LimitRate: rule.LimitRate,
-		Reason:    rule.Reason,
-		Chain:     chainName,
-		RuleName:  rule.Name,
+		LimitRate:  rule.LimitRate,
+		Reason:     rule.Reason,
+		Chain:      chainName,
+		RuleName:   rule.Name,
 	}
 }

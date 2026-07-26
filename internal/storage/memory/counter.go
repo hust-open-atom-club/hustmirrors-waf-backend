@@ -19,7 +19,7 @@ type CounterStore struct {
 }
 
 type counterBucket struct {
-	value    int64
+	value     int64
 	expiresAt time.Time
 }
 

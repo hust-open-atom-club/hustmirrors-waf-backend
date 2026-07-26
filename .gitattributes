@@ -1,0 +1,18 @@
+# Normalize line endings in the repository to LF.
+#
+# Without this, core.autocrlf=true checks Go sources out as CRLF while git
+# stores LF. gofmt then reports every file in the tree as unformatted,
+# which makes `gofmt -l` useless for finding real problems and hides
+# genuine formatting drift in the noise.
+*.go text eol=lf
+*.sql text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.js text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+*.conf text eol=lf
+Makefile text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf

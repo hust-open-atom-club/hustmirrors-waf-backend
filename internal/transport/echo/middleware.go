@@ -25,11 +25,11 @@ func requestIDMiddleware(logger logging.Logger) echov4.MiddlewareFunc {
 			if rid == "" {
 				rid = c.Request().Header.Get("X-Request-Id")
 			}
-		if rid != "" && logger != nil {
-			ctx := logging.WithFields(c.Request().Context(),
-				logging.FieldForRequestID(rid))
-			c.SetRequest(c.Request().WithContext(ctx))
-		}
+			if rid != "" && logger != nil {
+				ctx := logging.WithFields(c.Request().Context(),
+					logging.FieldForRequestID(rid))
+				c.SetRequest(c.Request().WithContext(ctx))
+			}
 			return err
 		}
 	}

@@ -2,19 +2,19 @@ package risk
 
 // RequestContext carries everything a rule can see about a request.
 type RequestContext struct {
-	Path           string
-	Method         string
-	Args           string
-	IP             string
-	UserAgent      string
-	HasToken       bool
-	HasSign        bool
+	Path      string
+	Method    string
+	Args      string
+	IP        string
+	UserAgent string
+	HasToken  bool
+	HasSign   bool
 	// PowStatus is one of: missing, valid, invalid, expired, used_up.
 	PowStatus string
 	// PowMode is empty when no token was provided, otherwise "ip_bound"
 	// or "generic".
-	PowMode     string
-	IsProtected bool
+	PowMode        string
+	IsProtected    bool
 	IsRangeRequest bool
 	// Counters is populated by the engine during evaluation when a rule's
 	// Match.Counter condition is encountered.
@@ -37,16 +37,16 @@ func (noopCounterResolver) Get(_ string) int64 { return 0 }
 var NoopCounterResolver CounterResolver = noopCounterResolver{}
 
 type Decision struct {
-	Target    string
+	Target     string
 	StatusCode int
 	// LimitRate is the Nginx-style rate limit string (e.g. "512k").
 	// Empty means "no limit".
 	LimitRate string
 	// Reason is forwarded to the client via X-Pow-Reason or X-Pow-Error.
-	Reason string
-	Chain string
+	Reason   string
+	Chain    string
 	RuleName string
-	Marks []string
+	Marks    []string
 }
 
 type TraceStep struct {

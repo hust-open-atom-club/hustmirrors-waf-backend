@@ -24,14 +24,14 @@ type UsageStore interface {
 }
 
 type ConsumeInput struct {
-	ID string
-	Mode string
-	Path string
-	Sign string
+	ID        string
+	Mode      string
+	Path      string
+	Sign      string
 	TokenHash string
 	ExpiresAt int64
-	MaxUses int
-	IP string
+	MaxUses   int
+	IP        string
 	UserAgent string
 	// NowUnix is the server-side "now" timestamp, taken from clock.Clock.
 	// Passed in explicitly so tests can drive time deterministically.
@@ -47,26 +47,26 @@ type ConsumeInput struct {
 }
 
 type ConsumeResult struct {
-	Allowed  bool
-	Uses     int
-	MaxUses  int
-	Reason   string
+	Allowed bool
+	Uses    int
+	MaxUses int
+	Reason  string
 }
 
 type UsageRecord struct {
-	ID         string
-	Mode       string
-	Path       string
-	Sign       string
-	TokenHash  string
-	Uses       int
-	MaxUses    int
-	FirstIP    string
-	LastIP     string
-	UserAgent  string
-	ExpiresAt  int64
-	CreatedAt  int64
-	UpdatedAt  int64
+	ID        string
+	Mode      string
+	Path      string
+	Sign      string
+	TokenHash string
+	Uses      int
+	MaxUses   int
+	FirstIP   string
+	LastIP    string
+	UserAgent string
+	ExpiresAt int64
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 // CounterStore is a sliding-window counter API used by the risk engine.

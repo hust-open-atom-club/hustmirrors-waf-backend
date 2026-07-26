@@ -13,7 +13,7 @@ import (
 func TestEngine_MARK_Accumulates(t *testing.T) {
 	chains := ChainMap{
 		"INPUT": {
-			Name: "INPUT",
+			Name:   "INPUT",
 			Policy: Policy{Target: TargetACCEPT, Reason: "default"},
 			Rules: []Rule{
 				{Name: "mark suspect", Match: matchAll{}, Target: TargetMARK, Mark: "suspect"},
@@ -36,7 +36,7 @@ func TestEngine_MARK_Accumulates(t *testing.T) {
 func TestEngine_MARK_SurvivesJump(t *testing.T) {
 	chains := ChainMap{
 		"INPUT": {
-			Name: "INPUT",
+			Name:   "INPUT",
 			Policy: Policy{Target: TargetACCEPT, Reason: "default"},
 			Rules: []Rule{
 				{Name: "mark before jump", Match: matchAll{}, Target: TargetMARK, Mark: "before"},
@@ -44,7 +44,7 @@ func TestEngine_MARK_SurvivesJump(t *testing.T) {
 			},
 		},
 		"CHILD": {
-			Name: "CHILD",
+			Name:   "CHILD",
 			Policy: Policy{Target: TargetACCEPT, Reason: "child_default"},
 			Rules: []Rule{
 				{Name: "mark in child", Match: matchAll{}, Target: TargetMARK, Mark: "in_child"},
@@ -67,7 +67,7 @@ func TestEngine_MARK_SurvivesJump(t *testing.T) {
 func TestEngine_MARK_NoMarkField(t *testing.T) {
 	chains := ChainMap{
 		"INPUT": {
-			Name: "INPUT",
+			Name:   "INPUT",
 			Policy: Policy{Target: TargetACCEPT, Reason: "default"},
 			Rules: []Rule{
 				{Name: "allow", Match: matchAll{}, Target: TargetACCEPT, Reason: "ok"},

@@ -7,13 +7,13 @@ import (
 // Container bundles every metric the application emits. All fields are
 // read-only after construction.
 type Container struct {
-	PowVerifyTotal         *prometheus.CounterVec
+	PowVerifyTotal          *prometheus.CounterVec
 	PowVerifyLatencySeconds *prometheus.HistogramVec
-	RiskDecisionTotal      *prometheus.CounterVec
-	StorageOperations      *prometheus.CounterVec
-	StorageLatencySeconds  *prometheus.HistogramVec
-	AdminActions           *prometheus.CounterVec
-	ActiveSignatures       prometheus.Gauge
+	RiskDecisionTotal       *prometheus.CounterVec
+	StorageOperations       *prometheus.CounterVec
+	StorageLatencySeconds   *prometheus.HistogramVec
+	AdminActions            *prometheus.CounterVec
+	ActiveSignatures        prometheus.Gauge
 }
 
 func New() *Container {

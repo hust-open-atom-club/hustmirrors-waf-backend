@@ -183,8 +183,8 @@ func TestValidate_RiskControlCounterMissing(t *testing.T) {
 			Policy: PolicyConfig{Target: "ACCEPT", Reason: "ok"},
 			Rules: []RuleConfig{
 				{
-					Name: "check missing counter",
-					Match: MatchConfig{Counter: &CounterMatch{Name: "nope", Op: ">=", Value: 1}},
+					Name:   "check missing counter",
+					Match:  MatchConfig{Counter: &CounterMatch{Name: "nope", Op: ">=", Value: 1}},
 					Target: "REJECT", Reason: "x",
 				},
 			},

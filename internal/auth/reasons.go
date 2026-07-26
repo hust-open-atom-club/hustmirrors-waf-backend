@@ -2,27 +2,27 @@ package auth
 
 // Decision constants emitted in the X-Pow-Decision response header.
 const (
-	DecisionVerified         = "verified"
-	DecisionUnverifiedSlow   = "unverified_slow"
+	DecisionVerified           = "verified"
+	DecisionUnverifiedSlow     = "unverified_slow"
 	DecisionUnverifiedVerySlow = "unverified_very_slow"
-	DecisionNotProtected     = "not_protected"
-	DecisionDenied          = "denied"
-	DecisionBypass          = "bypass"
+	DecisionNotProtected       = "not_protected"
+	DecisionDenied             = "denied"
+	DecisionBypass             = "bypass"
 	// DecisionDryRun: dry-run mode rewrote a deny to an allow.
-	DecisionDryRun          = "dry_run"
+	DecisionDryRun = "dry_run"
 )
 
 // Reason constants. These appear in the X-Pow-Reason / X-Pow-Error headers
 // and in the structured log line.
 const (
-	ReasonNotProtected     = "not_protected"
-	ReasonIPBoundValid     = "ip_bound_valid"
-	ReasonGenericValid     = "generic_valid"
-	ReasonDryRunAllow      = "dry_run_allow"
-	ReasonBypassAll        = "bypass_all"
-	ReasonRiskAccept       = "risk_accept"
-	ReasonRiskRateLimit    = "risk_rate_limit"
-	ReasonRequirePowPass   = "require_pow_pass"
+	ReasonNotProtected      = "not_protected"
+	ReasonIPBoundValid      = "ip_bound_valid"
+	ReasonGenericValid      = "generic_valid"
+	ReasonDryRunAllow       = "dry_run_allow"
+	ReasonBypassAll         = "bypass_all"
+	ReasonRiskAccept        = "risk_accept"
+	ReasonRiskRateLimit     = "risk_rate_limit"
+	ReasonRequirePowPass    = "require_pow_pass"
 	ReasonValidPowFullSpeed = "valid_pow_full_speed"
 
 	ReasonMissingHeaders       = "missing_headers"
@@ -49,17 +49,17 @@ const (
 	// ReasonMissingRealIP means the request carried no X-Real-IP, so an
 	// ip_bound token cannot be verified. This is a proxy misconfiguration,
 	// not a client error, and is reported as 500.
-	ReasonMissingRealIP = "missing_real_ip"
-	ReasonInvalidSignFormat    = "invalid_sign_format"
-	ReasonSignMismatch         = "sign_mismatch"
-	ReasonDifficultyNotMet     = "difficulty_not_met"
-	ReasonIPMismatch           = "ip_mismatch"
-	ReasonUsedUp               = "used_up"
-	ReasonRateLimited          = "rate_limited"
-	ReasonRiskReject           = "risk_reject"
-	ReasonRiskTooMany          = "risk_too_many"
-	ReasonStorageError         = "storage_error"
-	ReasonInternalError        = "internal_error"
+	ReasonMissingRealIP     = "missing_real_ip"
+	ReasonInvalidSignFormat = "invalid_sign_format"
+	ReasonSignMismatch      = "sign_mismatch"
+	ReasonDifficultyNotMet  = "difficulty_not_met"
+	ReasonIPMismatch        = "ip_mismatch"
+	ReasonUsedUp            = "used_up"
+	ReasonRateLimited       = "rate_limited"
+	ReasonRiskReject        = "risk_reject"
+	ReasonRiskTooMany       = "risk_too_many"
+	ReasonStorageError      = "storage_error"
+	ReasonInternalError     = "internal_error"
 )
 
 // statusForReason returns the canonical HTTP status for a deny reason.

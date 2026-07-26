@@ -12,17 +12,17 @@ import (
 )
 
 type Service struct {
-	cfg         *config.Config
-	riskEngine  *risk.Engine
-	auditLog    AuditLogger
-	validator   Validator
+	cfg        *config.Config
+	riskEngine *risk.Engine
+	auditLog   AuditLogger
+	validator  Validator
 }
 
 type Options struct {
-	Config    *config.Config
+	Config     *config.Config
 	RiskEngine *risk.Engine
-	AuditLog  AuditLogger
-	Validator Validator
+	AuditLog   AuditLogger
+	Validator  Validator
 }
 
 func New(opts Options) (*Service, error) {
@@ -48,10 +48,10 @@ func (s *Service) Ping(ctx context.Context, _ PingRequest) (PingResponse, error)
 func (s *Service) SystemInfo(_ context.Context, _ SystemInfoRequest) (SystemInfoResponse, error) {
 	info := version.Get()
 	return SystemInfoResponse{
-		Version:    info.Version,
-		Commit:     info.Commit,
-		BuildTime:  info.BuildTime,
-		GoVersion:  info.GoVersion,
+		Version:   info.Version,
+		Commit:    info.Commit,
+		BuildTime: info.BuildTime,
+		GoVersion: info.GoVersion,
 	}, nil
 }
 

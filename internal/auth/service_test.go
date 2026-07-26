@@ -350,7 +350,7 @@ func TestVerify_SignMismatch(t *testing.T) {
 	res := svc.Verify(context.Background(), AuthRequest{
 		OriginalURI: "/ubuntu.iso", OriginalMethod: "GET",
 		OriginalArgs: "token=" + token + "&sign=0000000000000000000000000000000000000000000000000000000000000000",
-		RealIP:      "1.2.3.4",
+		RealIP:       "1.2.3.4",
 	})
 	assert.False(t, res.Allowed)
 	assert.Equal(t, ReasonSignMismatch, res.Reason)
@@ -366,7 +366,7 @@ func TestVerify_DifficultyNotMet(t *testing.T) {
 	res := svc.Verify(context.Background(), AuthRequest{
 		OriginalURI: "/ubuntu.iso", OriginalMethod: "GET",
 		OriginalArgs: "token=" + token + "&sign=" + sign,
-		RealIP:      "1.2.3.4",
+		RealIP:       "1.2.3.4",
 	})
 	assert.False(t, res.Allowed)
 	assert.Equal(t, ReasonDifficultyNotMet, res.Reason)
@@ -384,7 +384,7 @@ func TestVerify_Expired(t *testing.T) {
 	res := svc.Verify(context.Background(), AuthRequest{
 		OriginalURI: "/ubuntu.iso", OriginalMethod: "GET",
 		OriginalArgs: "token=" + token + "&sign=" + sign,
-		RealIP:      "1.2.3.4",
+		RealIP:       "1.2.3.4",
 	})
 	assert.False(t, res.Allowed)
 	assert.Equal(t, ReasonExpired, res.Reason)
@@ -437,7 +437,7 @@ func TestVerify_ModeDisabled(t *testing.T) {
 	res := svc.Verify(context.Background(), AuthRequest{
 		OriginalURI: "/ubuntu.iso", OriginalMethod: "GET",
 		OriginalArgs: "token=" + token + "&sign=" + sign,
-		RealIP:      "1.2.3.4",
+		RealIP:       "1.2.3.4",
 	})
 	assert.False(t, res.Allowed)
 	assert.Equal(t, ReasonModeDisabled, res.Reason)
@@ -457,7 +457,7 @@ func TestVerify_TTLTooLong(t *testing.T) {
 	res := svc.Verify(context.Background(), AuthRequest{
 		OriginalURI: "/ubuntu.iso", OriginalMethod: "GET",
 		OriginalArgs: "token=" + token + "&sign=" + sign,
-		RealIP:      "1.2.3.4",
+		RealIP:       "1.2.3.4",
 	})
 	assert.False(t, res.Allowed)
 	assert.Equal(t, ReasonTTLTooLong, res.Reason)
@@ -465,20 +465,20 @@ func TestVerify_TTLTooLong(t *testing.T) {
 
 func TestStatusForReason(t *testing.T) {
 	cases := map[string]int{
-		ReasonNotProtected:     200,
-		ReasonIPBoundValid:     200,
-		ReasonGenericValid:     200,
-		ReasonDryRunAllow:      200,
-		ReasonBypassAll:        200,
-		ReasonMissingHeaders:   500,
-		ReasonStorageError:     500,
-		ReasonInternalError:    500,
-		ReasonRateLimited:      429,
-		ReasonRiskTooMany:      429,
+		ReasonNotProtected:       200,
+		ReasonIPBoundValid:       200,
+		ReasonGenericValid:       200,
+		ReasonDryRunAllow:        200,
+		ReasonBypassAll:          200,
+		ReasonMissingHeaders:     500,
+		ReasonStorageError:       500,
+		ReasonInternalError:      500,
+		ReasonRateLimited:        429,
+		ReasonRiskTooMany:        429,
 		ReasonMissingTokenOrSign: 403,
-		ReasonSignMismatch:     403,
-		ReasonIPMismatch:       403,
-		ReasonUsedUp:           403,
+		ReasonSignMismatch:       403,
+		ReasonIPMismatch:         403,
+		ReasonUsedUp:             403,
 	}
 	for reason, want := range cases {
 		assert.Equal(t, want, statusForReason(reason), "reason=%s", reason)

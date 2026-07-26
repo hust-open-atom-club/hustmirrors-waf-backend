@@ -87,11 +87,11 @@ func (r *CounterRegistry) LookupResolver(ctx context.Context, req *RequestContex
 	}
 	cache := make(map[string]int64, len(r.defs))
 	return &cachingResolver{
-		ctx:    ctx,
-		req:    req,
-		defs:   r.defs,
-		store:  r.store,
-		cache:  cache,
+		ctx:   ctx,
+		req:   req,
+		defs:  r.defs,
+		store: r.store,
+		cache: cache,
 	}
 }
 

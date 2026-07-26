@@ -17,6 +17,6 @@ type Fake struct{ t time.Time }
 
 func NewFake() *Fake { return &Fake{} }
 
-func (f *Fake) Now() time.Time      { return f.t }
-func (f *Fake) Set(t time.Time)     { f.t = t }
+func (f *Fake) Now() time.Time          { return f.t }
+func (f *Fake) Set(t time.Time)         { f.t = t }
 func (f *Fake) Advance(d time.Duration) { f.t = f.t.Add(d) }

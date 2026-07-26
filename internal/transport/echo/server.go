@@ -26,10 +26,10 @@ type Server struct {
 }
 
 type MainOptions struct {
-	Config   *config.Config
-	Logger   logging.Logger
-	Metrics  *metrics.Container
-	AuthSvc  *auth.Service
+	Config  *config.Config
+	Logger  logging.Logger
+	Metrics *metrics.Container
+	AuthSvc *auth.Service
 }
 
 func NewMain(opts MainOptions) *Server {

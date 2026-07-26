@@ -26,8 +26,8 @@ type Logger interface {
 
 type Field = zap.Field
 
-func String(k, v string) Field  { return zap.String(k, v) }
-func Int(k string, v int) Field { return zap.Int(k, v) }
+func String(k, v string) Field      { return zap.String(k, v) }
+func Int(k string, v int) Field     { return zap.Int(k, v) }
 func Int64(k string, v int64) Field { return zap.Int64(k, v) }
 func Bool(k string, v bool) Field   { return zap.Bool(k, v) }
 func Any(k string, v any) Field     { return zap.Any(k, v) }
