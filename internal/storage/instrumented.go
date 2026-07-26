@@ -19,11 +19,21 @@ type ActiveCounter interface {
 // InstrumentUsage wraps a UsageStore so every operation emits the
 // storage_operations_total and storage_latency_seconds metrics under the
 // given driver label. A nil container returns the store unchanged.
+//
+// ActiveCounter is an optional capability, so the wrapper must not claim
+// to implement it when the wrapped store does not: callers detect support
+// with a type assertion, and a decorator that always satisfies the
+// interface would turn "unsupported" from a compile-time-visible fact into
+// a failed call on every cleanup tick.
 func InstrumentUsage(driver string, m *metrics.Container, next UsageStore) UsageStore {
 	if m == nil || next == nil {
 		return next
 	}
-	return &instrumentedUsage{driver: driver, m: m, next: next}
+	base := &instrumentedUsage{driver: driver, m: m, next: next}
+	if c, ok := next.(ActiveCounter); ok {
+		return &instrumentedUsageCounter{instrumentedUsage: base, counter: c}
+	}
+	return base
 }
 
 type instrumentedUsage struct {
@@ -56,15 +66,16 @@ func (s *instrumentedUsage) CleanupExpired(ctx context.Context, beforeUnix int64
 
 func (s *instrumentedUsage) Close() error { return s.next.Close() }
 
-// CountActive forwards to the wrapped store when it supports counting,
-// so the decorator does not hide the capability from callers.
-func (s *instrumentedUsage) CountActive(ctx context.Context) (int64, error) {
-	c, ok := s.next.(ActiveCounter)
-	if !ok {
-		return 0, ErrUnsupported
-	}
+// instrumentedUsageCounter is the variant returned when the wrapped store
+// supports ActiveCounter, so the capability survives the decoration.
+type instrumentedUsageCounter struct {
+	*instrumentedUsage
+	counter ActiveCounter
+}
+
+func (s *instrumentedUsageCounter) CountActive(ctx context.Context) (int64, error) {
 	start := time.Now()
-	n, err := c.CountActive(ctx)
+	n, err := s.counter.CountActive(ctx)
 	s.observe("count_active", start, err)
 	return n, err
 }

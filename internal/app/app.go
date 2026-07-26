@@ -278,7 +278,8 @@ func (a *App) cleanupLoop(ctx context.Context, store storage.UsageStore) {
 
 // refreshActiveGauge updates the active_signatures gauge when the store
 // supports counting. Drivers that don't implement ActiveCounter (redis)
-// simply leave the gauge untouched.
+// are skipped entirely - InstrumentUsage preserves the real capability, so
+// this assertion is an accurate test rather than a call that would fail.
 func (a *App) refreshActiveGauge(ctx context.Context, store storage.UsageStore) {
 	if a.metrics == nil {
 		return
@@ -289,9 +290,7 @@ func (a *App) refreshActiveGauge(ctx context.Context, store storage.UsageStore) 
 	}
 	n, err := counter.CountActive(ctx)
 	if err != nil {
-		if !errors.Is(err, storage.ErrUnsupported) {
-			a.logger.Warn(ctx, "count active signatures failed", logging.Err(err))
-		}
+		a.logger.Warn(ctx, "count active signatures failed", logging.Err(err))
 		return
 	}
 	a.metrics.ActiveSignatures.Set(float64(n))
