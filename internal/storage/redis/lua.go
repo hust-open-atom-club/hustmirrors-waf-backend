@@ -5,9 +5,9 @@ import "github.com/redis/go-redis/v9"
 // consumeUsage atomically increments uses if below max_uses, and returns
 // {allowed, uses} as an int64 reply slice.
 //
-// KEYS[1] = pow:usage:<sign_id>
-// ARGV    = [max_uses, ttl_seconds, now_unix, ip, user_agent,
-//            mode, path, sign, token_hash, expires_at]
+// KEYS[1] is pow:usage:<sign_id>. ARGV is, in order: max_uses,
+// ttl_seconds, now_unix, ip, user_agent, mode, path, sign, token_hash,
+// expires_at.
 //
 // The script runs atomically in Redis so concurrent Consume calls against
 // the same sign id can never exceed max_uses. On first use the hash is

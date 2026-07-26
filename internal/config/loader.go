@@ -16,8 +16,10 @@ import (
 //  1. Built-in defaults applied in code (see defaults.go).
 //  2. The YAML file at the given path (or auto-discovered).
 //  3. Environment variables with prefix MIRRORS_WAF_ and separator __.
-//     e.g. MIRRORS_WAF_SERVER__LISTEN -> server.listen,
-//          MIRRORS_WAF_POW__DRY_RUN   -> pow.dry_run
+//
+// Environment variables map onto config keys by replacing __ with a dot
+// and lowercasing, so MIRRORS_WAF_SERVER__LISTEN sets server.listen and
+// MIRRORS_WAF_POW__DRY_RUN sets pow.dry_run.
 //
 // The returned Config has already had defaults applied and passed
 // Validate(). Callers that want a raw, unvalidated object should use
