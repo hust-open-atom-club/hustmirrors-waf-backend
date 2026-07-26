@@ -40,3 +40,28 @@ func isCounterSafe(s string) bool {
 	}
 	return !strings.ContainsAny(s, "\n\r\t ")
 }
+
+// isCanonicalSafe rejects values that could forge structure inside the
+// canonical string.
+//
+// BuildCanonicalInput joins fields as "key=value" separated by newlines,
+// so a value containing a newline can inject additional key=value lines.
+// It is applied to path and salt, which unlike cnt have no restricted
+// character set of their own.
+//
+// This is defence in depth rather than a live exploit: path must equal the
+// URI Nginx reports, and Go's HTTP parser rejects bare newlines in header
+// values, so a crafted path cannot currently reach here. That is a
+// property of the components in front of us, not of this package, and it
+// should not be what stands between a token and a forged signing input.
+func isCanonicalSafe(s string) bool {
+	if strings.ContainsAny(s, "\n\r") {
+		return false
+	}
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}

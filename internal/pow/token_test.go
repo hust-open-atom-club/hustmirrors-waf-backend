@@ -301,6 +301,49 @@ func TestComputeSignID_IndependentOfEncoding(t *testing.T) {
 	}
 }
 
+// TestValidatePayload_RejectsCanonicalInjection covers fields that are
+// interpolated into the canonical signing string. BuildCanonicalInput
+// joins "key=value" pairs with newlines, so a value carrying a newline can
+// append lines the signer never intended.
+//
+// Nothing upstream currently lets such a path through, but the validator
+// should not depend on that: the check belongs next to the format it
+// protects.
+func TestValidatePayload_RejectsCanonicalInjection(t *testing.T) {
+	opts := &ValidatorOptions{
+		AllowedModes:   []string{"generic"},
+		AllowedSalts:   []string{"s", "s\nexp=999"},
+		AllowEmptySalt: true,
+		MinDifficulty:  1,
+		MaxDifficulty:  64,
+	}
+	base := func() *TokenPayload {
+		return &TokenPayload{
+			Version: 1, Mode: "generic", Algorithm: "sha256",
+			Path: "/ok", Timestamp: 1, ExpiresAt: 2,
+			Difficulty: 22, Counter: "abc", Salt: "s",
+		}
+	}
+	require.NoError(t, ValidatePayload(base(), opts), "baseline must be valid")
+
+	for _, tc := range []struct {
+		name string
+		mut  func(*TokenPayload)
+		want error
+	}{
+		{"newline in path", func(p *TokenPayload) { p.Path = "/a\nts=999" }, ErrPathInvalid},
+		{"carriage return in path", func(p *TokenPayload) { p.Path = "/a\rts=999" }, ErrPathInvalid},
+		{"NUL in path", func(p *TokenPayload) { p.Path = "/a\x00b" }, ErrPathInvalid},
+		{"newline in salt", func(p *TokenPayload) { p.Salt = "s\nexp=999" }, ErrSaltInvalid},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := base()
+			tc.mut(p)
+			assert.ErrorIs(t, ValidatePayload(p, opts), tc.want)
+		})
+	}
+}
+
 func TestSaltAllowed(t *testing.T) {
 	assert.True(t, SaltAllowed("", nil, true))
 	assert.False(t, SaltAllowed("", nil, false))

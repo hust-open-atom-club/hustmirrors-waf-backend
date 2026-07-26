@@ -121,6 +121,11 @@ func ValidatePayload(p *TokenPayload, opts *ValidatorOptions) error {
 	if len(p.Path) > MaxPathLength {
 		return ErrPathTooLong
 	}
+	// path is interpolated into the canonical signing input, so a newline
+	// here would let the token declare extra fields. See isCanonicalSafe.
+	if !isCanonicalSafe(p.Path) {
+		return ErrPathInvalid
+	}
 
 	switch p.Mode {
 	case "ip_bound":
@@ -163,6 +168,12 @@ func ValidatePayload(p *TokenPayload, opts *ValidatorOptions) error {
 				return ErrSaltInvalid
 			}
 		} else {
+			// Same canonical-injection concern as path. Salts come from
+			// config so this should never fire, but the check costs
+			// nothing and keeps the invariant local to the validator.
+			if !isCanonicalSafe(p.Salt) {
+				return ErrSaltInvalid
+			}
 			ok := false
 			for _, s := range opts.AllowedSalts {
 				if s == p.Salt {
