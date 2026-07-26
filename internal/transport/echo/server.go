@@ -22,6 +22,7 @@ type Server struct {
 	metrics    *metrics.Container
 	authSvc    *auth.Service
 	adminSvc   *admin.Service
+	auditLog   admin.AuditLogger
 	httpServer *http.Server
 }
 
@@ -81,6 +82,7 @@ func NewAdmin(opts AdminOptions) *Server {
 		logger:   opts.Logger,
 		metrics:  opts.Metrics,
 		adminSvc: opts.AdminSvc,
+		auditLog: admin.NewLogAuditLogger(opts.Logger),
 	}
 	s.registerAdminRoutes()
 	return s

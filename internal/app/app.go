@@ -131,7 +131,6 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 		}
 		adminSvc, err = admin.New(admin.Options{
 			Config:     cfg,
-			AuditLog:   admin.NopAuditLogger{},
 			Validator:  admin.DefaultValidator{},
 			RiskEngine: riskEngine,
 		})

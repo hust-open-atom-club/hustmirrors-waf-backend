@@ -11,17 +11,20 @@ import (
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/version"
 )
 
+// Service holds the admin RPC handlers.
+//
+// Auditing lives in the transport layer, not here: every handler funnels
+// through one response writer there, so a single call site covers all of
+// them including request-binding failures that never reach this package.
 type Service struct {
 	cfg        *config.Config
 	riskEngine *risk.Engine
-	auditLog   AuditLogger
 	validator  Validator
 }
 
 type Options struct {
 	Config     *config.Config
 	RiskEngine *risk.Engine
-	AuditLog   AuditLogger
 	Validator  Validator
 }
 
@@ -29,11 +32,7 @@ func New(opts Options) (*Service, error) {
 	s := &Service{
 		cfg:        opts.Config,
 		riskEngine: opts.RiskEngine,
-		auditLog:   opts.AuditLog,
 		validator:  opts.Validator,
-	}
-	if s.auditLog == nil {
-		s.auditLog = NopAuditLogger{}
 	}
 	if s.validator == nil {
 		s.validator = DefaultValidator{}

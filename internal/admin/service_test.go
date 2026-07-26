@@ -103,5 +103,5 @@ func TestService_RuleReload_NotImplemented(t *testing.T) {
 }
 
 func TestNopAuditLogger(t *testing.T) {
-	require.NoError(t, NopAuditLogger{}.Log(context.Background(), "x", "y", "z", "w", nil))
+	NopAuditLogger{}.Log(context.Background(), AuditEvent{Action: "system.ping"})
 }
