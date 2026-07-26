@@ -24,7 +24,12 @@ CREATE INDEX IF NOT EXISTS idx_pow_usage_expires_at
 CREATE INDEX IF NOT EXISTS idx_pow_usage_path
     ON pow_usage(path);
 
--- risk_counter stores fixed-window counters for the risk engine.
+-- risk_counter: reserved, currently unused.
+--
+-- counter_driver accepts only memory and redis. A postgres implementation
+-- existed but was unreachable and had no expiry, so this table would have
+-- grown without bound. It is kept so an existing database still matches
+-- this migration; add a cleanup loop before wiring any code to it.
 CREATE TABLE IF NOT EXISTS risk_counter (
     name         TEXT NOT NULL,
     key          TEXT NOT NULL,

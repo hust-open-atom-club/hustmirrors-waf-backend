@@ -120,7 +120,7 @@ async function generate() {
     const difficulty = payload.d;
 
     // Spawn worker
-    if (worker) worker.terminate();
+    stopWorker();
     worker = new Worker("pow-worker.js");
 
     worker.onmessage = function (e) {
@@ -132,11 +132,19 @@ async function generate() {
             const sign = msg.sign;
             const token = encodeToken(payload);
             showResult(path, token, sign, payload, msg.attempts);
-            worker.terminate();
-            worker = null;
-            document.getElementById("generate").disabled = false;
-            document.getElementById("progress").style.display = "none";
+            stopWorker();
+        } else if (msg.type === "error") {
+            // The worker cannot proceed at all (e.g. no SubtleCrypto
+            // because the page is not on a secure origin). Surface it
+            // instead of leaving the progress bar spinning forever.
+            showError("无法计算 PoW：" + msg.message);
+            stopWorker();
         }
+    };
+
+    worker.onerror = function (e) {
+        showError("PoW worker 启动失败：" + (e.message || "未知错误"));
+        stopWorker();
     };
 
     worker.postMessage({ type: "start", payload: { canonical, difficulty } });
@@ -212,6 +220,17 @@ async function fetchUserIP() {
         throw new Error("whoami returned no ip");
     }
     return data.ip.trim();
+}
+
+// stopWorker tears down the worker and restores the form. Safe to call
+// when no worker is running.
+function stopWorker() {
+    if (worker) {
+        worker.terminate();
+        worker = null;
+    }
+    document.getElementById("generate").disabled = false;
+    document.getElementById("progress").style.display = "none";
 }
 
 function showError(msg) {
