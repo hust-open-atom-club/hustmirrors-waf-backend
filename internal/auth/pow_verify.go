@@ -123,12 +123,12 @@ func (s *Service) finalizeIPBound(ctx context.Context, p *pow.TokenPayload, req 
 		return s.maybeDryRun(ctx, denyMode(ReasonIPMismatch, mode))
 	}
 	res := allow(ReasonIPBoundValid, mode)
-	res.SignID = pow.ComputeSignID(tokenRaw, sign, p.Path, mode)
+	res.SignID = pow.ComputeSignID(p, sign, mode)
 	return res
 }
 
 func (s *Service) finalizeGeneric(ctx context.Context, p *pow.TokenPayload, req AuthRequest, tokenRaw, sign, mode string, now int64) AuthResult {
-	signID := pow.ComputeSignID(tokenRaw, sign, p.Path, mode)
+	signID := pow.ComputeSignID(p, sign, mode)
 	if s.usageStore == nil {
 		return s.maybeDryRun(ctx, withSignID(denyStatus(500, ReasonStorageError, mode), signID))
 	}

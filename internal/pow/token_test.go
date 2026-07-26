@@ -2,6 +2,7 @@ package pow
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -241,15 +242,63 @@ func TestHasLeadingZeroBits_Boundaries(t *testing.T) {
 }
 
 func TestComputeSignID_StableAndDistinct(t *testing.T) {
-	id1 := ComputeSignID("token-a", "sign-x", "/ubuntu.iso", "generic")
-	id2 := ComputeSignID("token-a", "sign-x", "/ubuntu.iso", "generic")
-	assert.Equal(t, id1, id2)
+	base := func() *TokenPayload {
+		return &TokenPayload{
+			Version: 1, Mode: "generic", Algorithm: "sha256",
+			Path: "/ubuntu.iso", Timestamp: 1735689600, ExpiresAt: 1735691400,
+			Difficulty: 22, Counter: "abc", Salt: "2025-demo",
+		}
+	}
+
+	id1 := ComputeSignID(base(), "sign-x", "generic")
+	id2 := ComputeSignID(base(), "sign-x", "generic")
+	assert.Equal(t, id1, id2, "same payload must yield the same id")
 	assert.Len(t, id1, 64)
 
-	id3 := ComputeSignID("token-a", "sign-y", "/ubuntu.iso", "generic")
-	assert.NotEqual(t, id1, id3)
-	id4 := ComputeSignID("token-a", "sign-x", "/debian.iso", "generic")
-	assert.NotEqual(t, id1, id4)
+	assert.NotEqual(t, id1, ComputeSignID(base(), "sign-y", "generic"),
+		"a different sign must yield a different id")
+
+	other := base()
+	other.Path = "/debian.iso"
+	assert.NotEqual(t, id1, ComputeSignID(other, "sign-x", "generic"),
+		"a different path must yield a different id")
+
+	later := base()
+	later.Timestamp++
+	assert.NotEqual(t, id1, ComputeSignID(later, "sign-x", "generic"),
+		"a different timestamp must yield a different id")
+}
+
+// TestComputeSignID_IndependentOfEncoding is the regression guard for the
+// max_uses bypass: one PoW solution has many wire encodings (trailing
+// whitespace, base64 padding), and every one of them must map to the same
+// usage record. Keying on the raw token instead let an attacker mint an
+// unlimited number of distinct ids from a single computation.
+func TestComputeSignID_IndependentOfEncoding(t *testing.T) {
+	p := &TokenPayload{
+		Version: 1, Mode: "generic", Algorithm: "sha256",
+		Path: "/ubuntu.iso", Timestamp: 1735689600, ExpiresAt: 1735691400,
+		Difficulty: 22, Counter: "abc", Salt: "2025-demo",
+	}
+	sign := ComputeSign(p)
+	want := ComputeSignID(p, sign, "generic")
+
+	raw, err := json.Marshal(p)
+	require.NoError(t, err)
+
+	encodings := map[string]string{
+		"unpadded base64url": base64.RawURLEncoding.EncodeToString(raw),
+		"padded base64url":   base64.URLEncoding.EncodeToString(raw),
+		"trailing space":     base64.RawURLEncoding.EncodeToString(append(append([]byte{}, raw...), ' ')),
+		"trailing newline":   base64.RawURLEncoding.EncodeToString(append(append([]byte{}, raw...), '\n')),
+	}
+
+	for name, token := range encodings {
+		decoded, err := DecodeToken(token)
+		require.NoError(t, err, name)
+		assert.Equal(t, want, ComputeSignID(decoded, sign, "generic"),
+			"%s decodes to the same payload and must share one usage record", name)
+	}
 }
 
 func TestSaltAllowed(t *testing.T) {
