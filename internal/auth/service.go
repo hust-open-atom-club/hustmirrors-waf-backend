@@ -174,7 +174,7 @@ func (s *Service) Verify(ctx context.Context, req AuthRequest) AuthResult {
 	}
 	vctx.payload = payload
 
-	if res, ok := s.runRiskEngine(ctx, vctx, riskReq, powStatus); ok {
+	if res, ok := s.runRiskEngine(ctx, &vctx, riskReq, powStatus); ok {
 		return res
 	}
 
@@ -193,7 +193,7 @@ func (s *Service) Verify(ctx context.Context, req AuthRequest) AuthResult {
 
 // runRiskEngine evaluates the risk chain and returns (result, handled).
 // When handled is false the caller should fall through to verifyPoWOnly.
-func (s *Service) runRiskEngine(ctx context.Context, vctx verifyCtx, riskReq *risk.RequestContext, powStatus string) (AuthResult, bool) {
+func (s *Service) runRiskEngine(ctx context.Context, vctx *verifyCtx, riskReq *risk.RequestContext, powStatus string) (AuthResult, bool) {
 	if s.riskEngine == nil {
 		return AuthResult{}, false
 	}
@@ -221,14 +221,24 @@ func (s *Service) runRiskEngine(ctx context.Context, vctx verifyCtx, riskReq *ri
 	trace := toAuthTrace(result.Trace)
 	switch dec.Target {
 	case risk.TargetACCEPT, risk.TargetRATELIMIT:
+		// A rule that accepts on pow_status=valid is honouring a token, so
+		// the token's quota must be charged here too. Skipping it let one
+		// generic token be redeemed indefinitely as long as some rule
+		// accepted before the PoW-only path ever ran.
+		if res, denied := s.chargeQuotaForRiskAllow(ctx, vctx, riskReq); denied {
+			return res, true
+		}
 		res := allow(reasonForAccept(dec.Reason), riskReq.PowMode)
 		res.LimitRate = dec.LimitRate
 		res.RiskChain = dec.Chain
 		res.RiskRule = dec.RuleName
 		res.RiskTrace = trace
 		res.RiskMarks = dec.Marks
+		res.SignID = vctx.signID
+		res.Uses = vctx.uses
+		res.MaxUses = vctx.maxUses
 		res.Decision = s.decideForAllow(res)
-		s.recordResult(vctx, res)
+		s.recordResult(*vctx, res)
 		return res, true
 
 	case risk.TargetREJECT:
@@ -241,7 +251,7 @@ func (s *Service) runRiskEngine(ctx context.Context, vctx verifyCtx, riskReq *ri
 		res.RiskRule = dec.RuleName
 		res.RiskTrace = trace
 		res.RiskMarks = dec.Marks
-		s.recordResult(vctx, res)
+		s.recordResult(*vctx, res)
 		return res, true
 
 	case risk.TargetTOOMANY:
@@ -254,7 +264,7 @@ func (s *Service) runRiskEngine(ctx context.Context, vctx verifyCtx, riskReq *ri
 		res.RiskRule = dec.RuleName
 		res.RiskTrace = trace
 		res.RiskMarks = dec.Marks
-		s.recordResult(vctx, res)
+		s.recordResult(*vctx, res)
 		return res, true
 
 	case risk.TargetREQUIREPOW:
@@ -276,10 +286,40 @@ func (s *Service) runRiskEngine(ctx context.Context, vctx verifyCtx, riskReq *ri
 		default:
 			res = denyMode(powStatusToReason(powStatus), riskReq.PowMode)
 		}
-		s.recordResult(vctx, res)
+		s.recordResult(*vctx, res)
 		return res, true
 	}
 
+	return AuthResult{}, false
+}
+
+// chargeQuotaForRiskAllow charges the generic-mode quota when the risk
+// engine allows a request on the strength of a valid token. Returns
+// (result, true) when the quota is exhausted or storage failed, in which
+// case the caller must return that result instead of allowing.
+//
+// Only generic mode has a quota; ip_bound and token-less requests are
+// unaffected.
+func (s *Service) chargeQuotaForRiskAllow(ctx context.Context, vctx *verifyCtx, riskReq *risk.RequestContext) (AuthResult, bool) {
+	if riskReq.PowMode != "generic" || riskReq.PowStatus != "valid" || vctx.payload == nil {
+		return AuthResult{}, false
+	}
+	cr, signID, err := s.consumeGenericQuota(ctx, vctx.payload, vctx.req,
+		vctx.tokenRaw, vctx.sign, "generic", s.clock.Now().Unix())
+	if err != nil {
+		res := withSignID(denyStatus(500, ReasonStorageError, "generic"), signID)
+		s.recordResult(*vctx, res)
+		return res, true
+	}
+	if !cr.Allowed {
+		res := withSignID(denyMode(ReasonUsedUp, "generic"), signID)
+		res.Uses = cr.Uses
+		res.MaxUses = cr.MaxUses
+		res = s.maybeDryRun(ctx, res)
+		s.recordResult(*vctx, res)
+		return res, true
+	}
+	vctx.signID, vctx.uses, vctx.maxUses = signID, cr.Uses, cr.MaxUses
 	return AuthResult{}, false
 }
 

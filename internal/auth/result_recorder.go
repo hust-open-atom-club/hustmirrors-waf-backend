@@ -28,8 +28,16 @@ func truncateForLog(s string, max int) string {
 type verifyCtx struct {
 	req       AuthRequest
 	payload   *pow.TokenPayload
+	tokenRaw  string
+	sign      string
 	start     time.Time
 	logFields []logging.Field
+
+	// Populated when the risk-engine allow path charges the generic quota,
+	// so the result can carry the same headers the PoW-only path emits.
+	signID  string
+	uses    int
+	maxUses int
 }
 
 // recordResult writes the metrics counter + structured log line for one

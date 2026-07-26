@@ -127,10 +127,13 @@ func (s *Service) finalizeIPBound(ctx context.Context, p *pow.TokenPayload, req 
 	return res
 }
 
-func (s *Service) finalizeGeneric(ctx context.Context, p *pow.TokenPayload, req AuthRequest, tokenRaw, sign, mode string, now int64) AuthResult {
+// consumeGenericQuota charges one use against a generic token's usage
+// record. Shared by the PoW-only path and the risk-engine allow path so
+// max_uses is enforced identically in both.
+func (s *Service) consumeGenericQuota(ctx context.Context, p *pow.TokenPayload, req AuthRequest, tokenRaw, sign, mode string, now int64) (storage.ConsumeResult, string, error) {
 	signID := pow.ComputeSignID(p, sign, mode)
 	if s.usageStore == nil {
-		return s.maybeDryRun(ctx, withSignID(denyStatus(500, ReasonStorageError, mode), signID))
+		return storage.ConsumeResult{}, signID, errNoUsageStore
 	}
 	skipConsume := req.OriginalMethod == "HEAD" && !s.cfg.Pow.Modes.Generic.CountHeadRequest
 	grace := 0
@@ -151,6 +154,13 @@ func (s *Service) finalizeGeneric(ctx context.Context, p *pow.TokenPayload, req 
 		GraceSeconds: grace,
 		SkipConsume:  skipConsume,
 	})
+	return cr, signID, err
+}
+
+var errNoUsageStore = errors.New("auth: usage store not configured")
+
+func (s *Service) finalizeGeneric(ctx context.Context, p *pow.TokenPayload, req AuthRequest, tokenRaw, sign, mode string, now int64) AuthResult {
+	cr, signID, err := s.consumeGenericQuota(ctx, p, req, tokenRaw, sign, mode, now)
 	if err != nil {
 		return s.maybeDryRun(ctx, withSignID(denyStatus(500, ReasonStorageError, mode), signID))
 	}
