@@ -169,13 +169,13 @@ func (s *Service) finalizeGeneric(ctx context.Context, p *pow.TokenPayload, req 
 
 // classifyPoW does a side-effect-free classification for the risk engine's
 // pre-evaluation. It returns (payload, pow_status, pow_mode) where
-// pow_status is one of: missing, valid, invalid, expired.
+// pow_status is one of: missing, valid, invalid, expired, unverifiable.
 //
-// realIP may legitimately be empty here (see finalizeIPBound): rather than
-// classify an otherwise-valid ip_bound token as "invalid" and let risk
-// rules act on a verdict caused by proxy misconfiguration, the IP check is
-// skipped and the authoritative decision is left to finalizeIPBound, which
-// fails the request closed with a 500.
+// "unverifiable" means the token itself is well-formed but a required
+// check could not be performed - currently only an ip_bound token when
+// X-Real-IP is absent. It must never be treated as "valid": the
+// REQUIRE_POW target consumes this status directly and would otherwise
+// admit a token bound to somebody else's address.
 func (s *Service) classifyPoW(ctx context.Context, tokenRaw, sign, path, realIP string) (*pow.TokenPayload, string, string) {
 	if len(tokenRaw) > s.cfg.Pow.MaxTokenLength || len(sign) > s.cfg.Pow.MaxSignLength {
 		return nil, "invalid", ""
@@ -202,8 +202,17 @@ func (s *Service) classifyPoW(ctx context.Context, tokenRaw, sign, path, realIP 
 	if _, ok := checkSignAndDifficulty(payload, sign); !ok {
 		return payload, "invalid", mode
 	}
-	if mode == "ip_bound" && realIP != "" && !sameIP(payload.IP, realIP) {
-		return payload, "invalid", mode
+	if mode == "ip_bound" {
+		// An absent X-Real-IP is a proxy misconfiguration, not a forged
+		// token, so this is deliberately distinct from "invalid" - but it
+		// is emphatically not "valid" either, since the binding this mode
+		// exists to enforce cannot be checked.
+		if realIP == "" {
+			return payload, "unverifiable", mode
+		}
+		if !sameIP(payload.IP, realIP) {
+			return payload, "invalid", mode
+		}
 	}
 	return payload, "valid", mode
 }

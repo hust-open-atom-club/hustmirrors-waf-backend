@@ -173,6 +173,19 @@ risk_control:
           limit_rate: "0"
           reason: "not_protected"
 
+        # "unverifiable" means the token is well-formed but its binding
+        # could not be checked - currently only an ip_bound token arriving
+        # without X-Real-IP, i.e. a proxy misconfiguration. It is kept
+        # separate from "invalid" so it is visibly a server-side fault,
+        # but it must still be rejected: accepting it would honour a token
+        # bound to an address nobody verified.
+        - name: "reject unverifiable pow"
+          match:
+            pow_status: "unverifiable"
+          target: REJECT
+          status: 500
+          reason: "missing_real_ip"
+
         - name: "reject invalid pow"
           match:
             pow_status_in: ["invalid", "expired", "used_up"]

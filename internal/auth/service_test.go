@@ -17,10 +17,18 @@ import (
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/matcher"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/metrics"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/pow"
+	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/risk"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/storage/memory"
 )
 
 func makeTestService(t *testing.T, cfg *config.Config) (*Service, *clock.Fake, *memory.UsageStore, func(payload pow.TokenPayload) (token, sign string)) {
+	t.Helper()
+	return makeTestServiceWithEngine(t, cfg, nil)
+}
+
+// makeTestServiceWithEngine is makeTestService with a risk engine attached,
+// for the paths that only run when risk control is enabled.
+func makeTestServiceWithEngine(t *testing.T, cfg *config.Config, engine *risk.Engine) (*Service, *clock.Fake, *memory.UsageStore, func(payload pow.TokenPayload) (token, sign string)) {
 	t.Helper()
 	if cfg == nil {
 		cfg = makeBaseConfig()
@@ -36,6 +44,7 @@ func makeTestService(t *testing.T, cfg *config.Config) (*Service, *clock.Fake, *
 	svc, err := New(Options{
 		Config: cfg, Matcher: m, UsageStore: store,
 		Clock: fc, Logger: logging.NewNop(), Metrics: metrics.New(),
+		RiskEngine: engine,
 	})
 	require.NoError(t, err)
 
@@ -238,11 +247,14 @@ func TestVerify_IPBound_MissingRealIP_NotRescuedByDryRun(t *testing.T) {
 	assert.Equal(t, ReasonMissingRealIP, res.Reason)
 }
 
-// TestClassifyPoW_MissingRealIPDoesNotMarkTokenInvalid guards the risk-engine
-// input: an otherwise-valid ip_bound token must not be classified "invalid"
-// just because X-Real-IP is absent, or risk rules keyed on pow_status would
-// act on a verdict caused by misconfiguration rather than by the client.
-func TestClassifyPoW_MissingRealIPDoesNotMarkTokenInvalid(t *testing.T) {
+// TestClassifyPoW_MissingRealIPIsUnverifiable pins the three-way
+// distinction the risk engine depends on. An absent X-Real-IP is neither
+// a forged token ("invalid") nor a checked one ("valid") - conflating it
+// with either is a bug:
+//   - as "invalid", risk rules punish clients for a proxy misconfiguration
+//   - as "valid", REQUIRE_POW admits a token bound to another address,
+//     because that path never reaches finalizeIPBound
+func TestClassifyPoW_MissingRealIPIsUnverifiable(t *testing.T) {
 	svc, _, _, mint := makeTestService(t, nil)
 	payload := findValidCounterForDifficulty(t, pow.TokenPayload{
 		Mode: "ip_bound", Path: "/ubuntu.iso", IP: "1.2.3.4",
@@ -251,12 +263,50 @@ func TestClassifyPoW_MissingRealIPDoesNotMarkTokenInvalid(t *testing.T) {
 
 	_, status, mode := svc.classifyPoW(context.Background(), token, sign, "/ubuntu.iso", "")
 	assert.Equal(t, "ip_bound", mode)
-	assert.Equal(t, "valid", status,
-		"empty realIP must not downgrade the classification to invalid")
+	assert.Equal(t, "unverifiable", status,
+		"an unverifiable binding must not be reported as valid or invalid")
 
 	// A genuine mismatch, where realIP is present, still classifies invalid.
 	_, status, _ = svc.classifyPoW(context.Background(), token, sign, "/ubuntu.iso", "9.9.9.9")
 	assert.Equal(t, "invalid", status)
+
+	// The matching case is unaffected.
+	_, status, _ = svc.classifyPoW(context.Background(), token, sign, "/ubuntu.iso", "1.2.3.4")
+	assert.Equal(t, "valid", status)
+}
+
+// TestVerify_RequirePow_IPBoundWithoutRealIPIsDenied is the end-to-end
+// guard for the REQUIRE_POW path, which consumes classifyPoW's verdict
+// directly and has no later gate. A token bound to a different address
+// must never be admitted just because the proxy dropped X-Real-IP.
+func TestVerify_RequirePow_IPBoundWithoutRealIPIsDenied(t *testing.T) {
+	cfg := makeBaseConfig()
+	cfg.RiskControl.Enabled = true
+	engine, err := risk.NewEngine(risk.ChainMap{
+		"INPUT": {
+			Name:   "INPUT",
+			Policy: risk.Policy{Target: risk.TargetREQUIREPOW, Reason: "need_pow"},
+		},
+	})
+	require.NoError(t, err)
+
+	svc, _, _, mint := makeTestServiceWithEngine(t, cfg, engine)
+	// Bound to somebody else's address.
+	payload := findValidCounterForDifficulty(t, pow.TokenPayload{
+		Mode: "ip_bound", Path: "/ubuntu.iso", IP: "9.9.9.9",
+	}, 8)
+	token, sign := mint(payload)
+
+	res := svc.Verify(context.Background(), AuthRequest{
+		OriginalURI:    "/ubuntu.iso",
+		OriginalMethod: "GET",
+		OriginalArgs:   "token=" + token + "&sign=" + sign,
+		RealIP:         "",
+	})
+	assert.False(t, res.Allowed,
+		"an ip_bound token must never be accepted when its binding cannot be checked")
+	assert.Equal(t, 500, res.HTTPStatus)
+	assert.Equal(t, ReasonMissingRealIP, res.Reason)
 }
 
 func TestVerify_IPBoundValid(t *testing.T) {

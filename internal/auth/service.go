@@ -264,6 +264,15 @@ func (s *Service) runRiskEngine(ctx context.Context, vctx verifyCtx, riskReq *ri
 			res = allow(ReasonRequirePowPass, riskReq.PowMode)
 		case "missing":
 			res = deny(ReasonMissingTokenOrSign)
+		case "unverifiable":
+			// The token could not be checked because X-Real-IP is absent.
+			// Fail closed with a server error rather than admitting it:
+			// this path never reaches finalizeIPBound, so there is no
+			// later gate that would catch it.
+			s.logger.Error(ctx, "X-Real-IP is empty; ip_bound token cannot be verified. "+
+				"Check that Nginx sets proxy_set_header X-Real-IP on the auth_request location",
+				logging.String("path", riskReq.Path))
+			res = denyStatus(500, ReasonMissingRealIP, riskReq.PowMode)
 		default:
 			res = denyMode(powStatusToReason(powStatus), riskReq.PowMode)
 		}
