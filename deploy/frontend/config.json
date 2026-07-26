@@ -1,6 +1,7 @@
 {
     "algorithm": "sha256",
     "salt": "2025-demo-salt",
+    "whoami_url": "/whoami",
     "modes": {
         "ip_bound": {
             "enabled": true,

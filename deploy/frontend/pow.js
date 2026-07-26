@@ -82,8 +82,11 @@ async function generate() {
 
     let payload = buildPayload(path, selectedMode);
 
-    // For ip_bound mode, we need the user's public IP. We fetch it from
-    // a public service; if that fails, ask the user to enter it.
+    // For ip_bound mode the token embeds the client's public IP, and the
+    // backend denies the request unless it matches the IP it observes. So
+    // we ask the backend itself rather than a third-party lookup, which
+    // could report a different address (dual-stack, alternate egress) and
+    // produce an ip_mismatch that is hard to diagnose.
     if (selectedMode === "ip_bound") {
         try {
             const ip = await fetchUserIP();
@@ -172,9 +175,23 @@ function copyUrl() {
     });
 }
 
+// fetchUserIP asks the backend what IP it sees this client as. This must
+// agree with the IP the /verify_pow handler compares against, which is why
+// it is not a third-party service.
+//
+// whoami_url is overridable in config.json for deployments where the PoW
+// page is served from a different origin than the API.
 async function fetchUserIP() {
-    const resp = await fetch("https://api.ipify.org?format=text");
-    return (await resp.text()).trim();
+    const url = (config && config.whoami_url) || "/whoami";
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) {
+        throw new Error("whoami failed: " + resp.status);
+    }
+    const data = await resp.json();
+    if (!data.ip) {
+        throw new Error("whoami returned no ip");
+    }
+    return data.ip.trim();
 }
 
 function showError(msg) {

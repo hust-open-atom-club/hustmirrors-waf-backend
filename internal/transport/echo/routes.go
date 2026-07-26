@@ -9,6 +9,7 @@ import (
 func (s *Server) registerMainRoutes() {
 	s.echo.GET("/healthz", s.healthz)
 	s.echo.GET("/readyz", s.readyz)
+	s.echo.GET("/whoami", s.whoami)
 
 	if s.metrics != nil {
 		s.echo.GET("/metrics", echov4.WrapHandler(promhttp.Handler()))

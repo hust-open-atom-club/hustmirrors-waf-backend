@@ -105,6 +105,61 @@ func TestServer_Readyz(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
+func TestServer_Whoami(t *testing.T) {
+	// The ip_bound flow depends on this returning exactly the IP that
+	// /verify_pow will compare the token against, so the precedence here
+	// must match clientIP: X-Real-IP, then X-Forwarded-For, then RemoteAddr.
+	cases := []struct {
+		name       string
+		realIP     string
+		forwarded  string
+		remoteAddr string
+		want       string
+	}{
+		{
+			name:       "prefers X-Real-IP",
+			realIP:     "203.0.113.7",
+			forwarded:  "198.51.100.1",
+			remoteAddr: "192.0.2.1:1234",
+			want:       "203.0.113.7",
+		},
+		{
+			name:       "falls back to first X-Forwarded-For hop",
+			forwarded:  "198.51.100.1, 10.0.0.1",
+			remoteAddr: "192.0.2.1:1234",
+			want:       "198.51.100.1",
+		},
+		{
+			name:       "falls back to RemoteAddr without port",
+			remoteAddr: "192.0.2.1:1234",
+			want:       "192.0.2.1",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewMain(MainOptions{Config: &config.Config{}, Logger: logging.NewNop()})
+			req := httptest.NewRequest(http.MethodGet, "/whoami", nil)
+			if tc.realIP != "" {
+				req.Header.Set("X-Real-IP", tc.realIP)
+			}
+			if tc.forwarded != "" {
+				req.Header.Set("X-Forwarded-For", tc.forwarded)
+			}
+			req.RemoteAddr = tc.remoteAddr
+
+			rec := httptest.NewRecorder()
+			s.Echo().ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+			var body map[string]string
+			require.NoError(t, json.NewDecoder(rec.Body).Decode(&body))
+			assert.Equal(t, tc.want, body["ip"])
+		})
+	}
+}
+
 func TestServer_Admin_Ping_NoneAuth(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Admin.Auth.Type = "none"

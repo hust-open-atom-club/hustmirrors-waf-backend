@@ -76,6 +76,22 @@ func (s *Server) healthz(c echov4.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// whoami returns the caller's IP as this service sees it.
+//
+// The ip_bound PoW mode requires the client to embed its own public IP in
+// the token, and that IP must match what the backend observes. Asking a
+// third-party service (api.ipify.org) is unreliable and can disagree with
+// us when the client is dual-stack or behind a different egress path, so
+// the frontend asks the origin it is actually going to be verified by.
+//
+// Cache-Control is set explicitly: a cached response here would hand the
+// browser a stale IP and produce ip_mismatch denials that are hard to
+// diagnose.
+func (s *Server) whoami(c echov4.Context) error {
+	c.Response().Header().Set("Cache-Control", "no-store")
+	return c.JSON(http.StatusOK, map[string]string{"ip": clientIP(c)})
+}
+
 func (s *Server) readyz(c echov4.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "storage": "ok"})
 }
