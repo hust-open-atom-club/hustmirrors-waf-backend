@@ -51,7 +51,7 @@ sequenceDiagram
     User->>Nginx: GET /ubuntu.iso?token=... 和 sign=...
     Nginx->>Auth: auth_request /verify_pow<br/>X-Original-URI, X-Original-Args, X-Real-IP
 
-    Auth->>Auth: 1. 路径是否受保护？
+    Auth->>Auth: 1. 路径归一化后判断是否受保护
     Auth->>Auth: 2. 解析 token，校验字段<br/>（version/mode/algorithm/path格式/salt）
     Auth->>Auth: 3. token.path == 请求路径？
     Auth->>Auth: 4. 未过期？TTL 合法？
@@ -86,6 +86,29 @@ sequenceDiagram
 
 PoW 结果携带在 URL 参数中（`?token=...` 和 `sign=...`），不依赖 Cookie/Session，wget/curl 直接可用。
 
+### 风控规则链
+
+`risk_control.enabled=true` 时，请求先过一条 iptables 风格的规则链，再决定是否走
+PoW 校验。链的入口是 `INPUT`，支持 `ACCEPT` / `REJECT` / `RATE_LIMIT` /
+`TOO_MANY` / `REQUIRE_POW` / `JUMP` / `LOG` / `MARK`。
+
+规则匹配 `pow_status` 时，取值含义：
+
+| 值 | 含义 |
+|---|---|
+| `missing` | 没带 token |
+| `valid` | token 合法且已通过全部校验 |
+| `invalid` | 签名不符、难度不够、path 不匹配等 |
+| `expired` | 已过期 |
+| `unverifiable` | token 本身合法，但**无法校验**——目前仅指 `ip_bound` token 遇到 `X-Real-IP` 缺失 |
+
+`unverifiable` 单独成一类，是因为它既不是伪造（不该按 `invalid` 惩罚客户端），
+也不能当作通过（放行等于承认一个没人验证过的 IP 绑定）。规则里必须显式拒绝它，
+示例配置已包含该规则。
+
+> `generic` 模式的 `max_uses` 在风控放行路径上同样生效。规则命中 `ACCEPT` 并不
+> 意味着跳过配额扣减。
+
 ---
 
 ## 快速开始
@@ -111,7 +134,14 @@ curl http://127.0.0.1:8080/healthz
 
 curl http://127.0.0.1:8080/readyz
 # {"status":"ok","storage":"ok"}
+
+curl -i http://127.0.0.1:8080/whoami -H "X-Real-IP: 1.2.3.4"
+# {"ip":"1.2.3.4"}
 ```
+
+`/whoami` 返回后端看到的客户端 IP，供 PoW 页面生成 `ip_bound` token。
+它只读 `X-Real-IP`——与 `/verify_pow` 一致，缺失时返回 500 `missing_real_ip`，
+而不是回退到其他来源后在验证阶段才失败。
 
 ### 验证鉴权
 
@@ -120,13 +150,13 @@ curl http://127.0.0.1:8080/readyz
 curl -i http://127.0.0.1:8080/verify_pow \
   -H "X-Original-URI: /index.html" \
   -H "X-Real-IP: 1.2.3.4"
+# X-Pow-Reason: not_protected
 
-# 保护路径无 token：200 + 限速头
+# 保护路径无 token：403
 curl -i http://127.0.0.1:8080/verify_pow \
   -H "X-Original-URI: /ubuntu.iso" \
   -H "X-Real-IP: 1.2.3.4"
-# X-Pow-Decision: unverified_slow
-# X-Pow-Limit-Rate: 512k
+# X-Pow-Error: missing_token_or_sign
 
 # 非法 token：403
 curl -i http://127.0.0.1:8080/verify_pow \
@@ -134,6 +164,22 @@ curl -i http://127.0.0.1:8080/verify_pow \
   -H "X-Original-Args: token=invalid&sign=0000...0000" \
   -H "X-Real-IP: 1.2.3.4"
 # X-Pow-Error: malformed_token
+```
+
+以上是 `config.dev.yaml`（`risk_control.enabled=false`）的行为：无 token 直接拒绝。
+
+`config.example.yaml` 开启了风控链，无 token 的请求会命中 `RATE_LIMIT` 规则而非被拒：
+
+```bash
+./bin/server --config configs/config.example.yaml
+
+curl -i http://127.0.0.1:8080/verify_pow \
+  -H "X-Original-URI: /ubuntu.iso" \
+  -H "X-Real-IP: 1.2.3.4"
+# HTTP/1.1 200 OK
+# X-Pow-Decision: unverified_slow
+# X-Pow-Reason: default_unverified_slow
+# X-Pow-Limit-Rate: 512k
 ```
 
 ---
@@ -209,10 +255,15 @@ print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 | `pow.bypass_all` | `false` | 紧急放行开关 |
 | `pow.modes.ip_bound` | enabled, d=22, ttl=24h | 绑定 IP 长效模式 |
 | `pow.modes.generic` | enabled, d=22, ttl=30m, max_uses=5 | 通用短效模式 |
-| `storage.driver` | `memory` | `memory` / `postgres` |
+| `storage.driver` | `memory` | `memory` / `postgres` / `redis` |
 | `storage.counter_driver` | `memory` | `memory` / `redis` |
 | `risk_control.enabled` | `true` | 风控规则链 |
+| `cleanup.enabled` | `true` | 过期记录回收（省略该段即为开启） |
 | `admin.enabled` | `false` | 管理 API |
+
+> `admin.enabled=true` 时必须显式写 `admin.auth.type`。留空会被配置校验拒绝，
+> 避免管理接口在无认证状态下启动。`type: none` 仅在监听 loopback
+> 或配置了 `allow_cidrs` 时接受。
 
 环境变量覆盖（前缀 `MIRRORS_WAF_`，分隔符 `__`）：
 
@@ -232,8 +283,8 @@ MIRRORS_WAF_STORAGE__DRIVER=postgres
 │   ├── app/                  # 装配与启动
 │   ├── auth/                 # PoW 验证编排
 │   ├── pow/                  # token / canonical / sign / difficulty
-│   ├── matcher/             # 路径保护规则
-│   ├── storage/             # memory / postgres / redis 三实现
+│   ├── matcher/             # 路径归一化 + 保护规则
+│   ├── storage/             # usage: memory/postgres/redis，counter: memory/redis
 │   ├── risk/                # iptables 风格规则链
 │   ├── transport/echo/      # HTTP 层
 │   ├── admin/               # 管理 API
@@ -275,7 +326,7 @@ make migrate-up
 
 ```bash
 make test          # 单元测试
-make test-race     # race detector
+make test-race     # race detector（需 CGO，Windows 上需装 gcc）
 go test -tags=benchmark -bench=. ./internal/app/...  # 压测
 ```
 
