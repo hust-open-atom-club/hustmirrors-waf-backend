@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/clock"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/config"
@@ -131,12 +130,9 @@ func (s *Service) Verify(ctx context.Context, req AuthRequest) AuthResult {
 		logging.String("method", req.OriginalMethod),
 		logging.String("user_agent", req.UserAgent),
 	}
-	defer func() {
-		if s.metrics != nil {
-			elapsed := time.Since(vctx.start).Seconds()
-			s.metrics.PowVerifyLatencySeconds.WithLabelValues("").Observe(elapsed)
-		}
-	}()
+	// NOTE: the latency histogram is observed inside recordResult, not in a
+	// defer here, so that the "mode" label is populated. Every return path
+	// below calls recordResult exactly once.
 
 	if s.cfg.Pow.BypassAll {
 		res := allowDecision(ReasonBypassAll, "", DecisionBypass)
@@ -217,6 +213,11 @@ func (s *Service) runRiskEngine(ctx context.Context, vctx verifyCtx, riskReq *ri
 	}
 
 	dec := result.Decision
+	if s.metrics != nil {
+		s.metrics.RiskDecisionTotal.
+			WithLabelValues(dec.Target, dec.Reason).
+			Inc()
+	}
 	trace := toAuthTrace(result.Trace)
 	switch dec.Target {
 	case risk.TargetACCEPT, risk.TargetRATELIMIT:

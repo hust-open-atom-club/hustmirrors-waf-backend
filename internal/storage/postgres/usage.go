@@ -144,6 +144,20 @@ func (s *UsageStore) CleanupExpired(ctx context.Context, beforeUnix int64) (int,
 	return int(tag.RowsAffected()), nil
 }
 
+// CountActive reports the number of non-expired usage rows. Used to feed
+// the storage_active_signatures gauge.
+func (s *UsageStore) CountActive(ctx context.Context) (int64, error) {
+	if s.isClosed() {
+		return 0, storage.ErrClosed
+	}
+	const q = `SELECT count(*) FROM pow_usage WHERE expires_at >= $1`
+	var n int64
+	if err := s.pool.QueryRow(ctx, q, time.Now().Unix()).Scan(&n); err != nil {
+		return 0, fmt.Errorf("postgres: count active: %w", err)
+	}
+	return n, nil
+}
+
 func (s *UsageStore) Close() error {
 	if s.isClosed() {
 		return nil
@@ -157,3 +171,4 @@ func (s *UsageStore) isClosed() bool {
 }
 
 var _ storage.UsageStore = (*UsageStore)(nil)
+var _ storage.ActiveCounter = (*UsageStore)(nil)

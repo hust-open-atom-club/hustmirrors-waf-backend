@@ -106,6 +106,17 @@ func (s *UsageStore) CleanupExpired(_ context.Context, beforeUnix int64) (int, e
 	return removed, nil
 }
 
+// CountActive reports the number of records currently held. Used to feed
+// the storage_active_signatures gauge.
+func (s *UsageStore) CountActive(_ context.Context) (int64, error) {
+	if s.isClosed() {
+		return 0, storage.ErrClosed
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return int64(len(s.records)), nil
+}
+
 func (s *UsageStore) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -121,3 +132,4 @@ func (s *UsageStore) isClosed() bool {
 }
 
 var _ storage.UsageStore = (*UsageStore)(nil)
+var _ storage.ActiveCounter = (*UsageStore)(nil)

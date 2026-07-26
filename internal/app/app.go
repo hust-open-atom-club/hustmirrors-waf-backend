@@ -77,7 +77,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	excluded := buildExcludedMatcher(cfg)
 	matcherComposite := matcher.NewComposite(protected, excluded)
 
-	usageStore, counterStore, redisClient, storageCloser, err := buildStorage(ctx, cfg, logger)
+	usageStore, counterStore, redisClient, storageCloser, err := buildStorage(ctx, cfg, m, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -246,6 +246,7 @@ func (a *App) cleanupLoop(ctx context.Context, store storage.UsageStore) {
 	defer a.cleanupWG.Done()
 	ticker := time.NewTicker(a.cfg.Cleanup.Interval)
 	defer ticker.Stop()
+	a.refreshActiveGauge(ctx, store)
 	for {
 		select {
 		case <-ctx.Done():
@@ -264,8 +265,30 @@ func (a *App) cleanupLoop(ctx context.Context, store storage.UsageStore) {
 					logging.Int64("threshold", threshold),
 				)
 			}
+			a.refreshActiveGauge(ctx, store)
 		}
 	}
+}
+
+// refreshActiveGauge updates the active_signatures gauge when the store
+// supports counting. Drivers that don't implement ActiveCounter (redis)
+// simply leave the gauge untouched.
+func (a *App) refreshActiveGauge(ctx context.Context, store storage.UsageStore) {
+	if a.metrics == nil {
+		return
+	}
+	counter, ok := store.(storage.ActiveCounter)
+	if !ok {
+		return
+	}
+	n, err := counter.CountActive(ctx)
+	if err != nil {
+		if !errors.Is(err, storage.ErrUnsupported) {
+			a.logger.Warn(ctx, "count active signatures failed", logging.Err(err))
+		}
+		return
+	}
+	a.metrics.ActiveSignatures.Set(float64(n))
 }
 
 func buildProtectedMatcher(cfg *config.Config) matcher.Matcher {
@@ -298,7 +321,7 @@ func (u unionMatcher) ShouldProtect(p string) bool {
 	return u.a.ShouldProtect(p) || u.b.ShouldProtect(p)
 }
 
-func buildStorage(ctx context.Context, cfg *config.Config, logger logging.Logger) (storage.UsageStore, storage.CounterStore, *redis.Client, func() error, error) {
+func buildStorage(ctx context.Context, cfg *config.Config, m *metrics.Container, logger logging.Logger) (storage.UsageStore, storage.CounterStore, *redis.Client, func() error, error) {
 	var (
 		usageStore   storage.UsageStore
 		counterStore storage.CounterStore
@@ -308,7 +331,7 @@ func buildStorage(ctx context.Context, cfg *config.Config, logger logging.Logger
 
 	switch cfg.Storage.Driver {
 	case "memory":
-		usageStore = memstore.NewUsageStore()
+		usageStore = storage.InstrumentUsage("memory", m, memstore.NewUsageStore())
 	case "postgres":
 		pool, err := pgstore.OpenPool(ctx, pgstore.PoolConfig{
 			DSN:          cfg.Storage.Postgres.DSN,
@@ -319,13 +342,13 @@ func buildStorage(ctx context.Context, cfg *config.Config, logger logging.Logger
 			return nil, nil, nil, nil, fmt.Errorf("app: open postgres pool: %w", err)
 		}
 		pgPool = pool
-		usageStore = pgstore.NewUsageStoreFromPool(pool)
+		usageStore = storage.InstrumentUsage("postgres", m, pgstore.NewUsageStoreFromPool(pool))
 	}
 
 	switch cfg.Storage.CounterDriver {
 	case "memory":
 		if counterStore == nil {
-			counterStore = memstore.NewCounterStore()
+			counterStore = storage.InstrumentCounter("memory", m, memstore.NewCounterStore())
 		}
 	case "redis":
 		redisClient = redis.NewClient(&redis.Options{
@@ -335,14 +358,11 @@ func buildStorage(ctx context.Context, cfg *config.Config, logger logging.Logger
 		})
 		if err := redisClient.Ping(ctx).Err(); err != nil {
 			logger.Warn(ctx, "redis ping failed; falling back to memory counter store", logging.Err(err))
-			counterStore = memstore.NewCounterStore()
+			counterStore = storage.InstrumentCounter("memory", m, memstore.NewCounterStore())
 			_ = redisClient.Close()
 			redisClient = nil
 		} else {
-			counterStore = redisstore.NewCounterStore(redisClient, cfg.Storage.Redis.KeyPrefix)
-			if usageStore == nil {
-				usageStore = redisstore.NewUsageStore(redisClient, cfg.Storage.Redis.KeyPrefix)
-			}
+			counterStore = storage.InstrumentCounter("redis", m, redisstore.NewCounterStore(redisClient, cfg.Storage.Redis.KeyPrefix))
 		}
 	}
 

@@ -19,13 +19,21 @@ type verifyCtx struct {
 
 // recordResult writes the metrics counter + structured log line for one
 // verification result.
+//
+// Every return path in Verify funnels through here, so this is also where
+// the latency histogram is observed: doing it here (rather than in a defer
+// at the top of Verify) means the "mode" label is already resolved.
 func (s *Service) recordResult(vctx verifyCtx, res AuthResult) {
+	elapsed := time.Since(vctx.start)
 	if s.metrics != nil {
 		s.metrics.PowVerifyTotal.WithLabelValues(
 			statusBucket(res.Allowed),
 			res.Reason,
 			res.Mode,
 		).Inc()
+		s.metrics.PowVerifyLatencySeconds.
+			WithLabelValues(res.Mode).
+			Observe(elapsed.Seconds())
 	}
 	lvl := "info"
 	if !res.Allowed {
@@ -35,7 +43,7 @@ func (s *Service) recordResult(vctx verifyCtx, res AuthResult) {
 			lvl = "warn"
 		}
 	}
-	elapsedMs := time.Since(vctx.start).Milliseconds()
+	elapsedMs := elapsed.Milliseconds()
 	all := append([]logging.Field{}, vctx.logFields...)
 	all = append(all,
 		logging.String("event", "pow_verify"),
