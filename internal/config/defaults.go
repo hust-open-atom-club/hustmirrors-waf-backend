@@ -92,6 +92,10 @@ func applyDefaults(c *Config) {
 		c.Admin.Listen = "127.0.0.1:8081"
 	}
 
+	if c.Cleanup.Enabled == nil {
+		on := true
+		c.Cleanup.Enabled = &on
+	}
 	if c.Cleanup.Interval == 0 {
 		c.Cleanup.Interval = parseDur("10m")
 	}

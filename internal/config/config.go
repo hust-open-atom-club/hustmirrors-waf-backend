@@ -182,7 +182,11 @@ type LoggingConfig struct {
 
 // Expired usage records are purged by a background loop.
 type CleanupConfig struct {
-	Enabled            bool          `mapstructure:"enabled"`
+	// Enabled is a pointer so that an omitted key is distinguishable from
+	// an explicit "false". Omitting it defaults to on: interval and
+	// expired_grace_period already default to sane values, and a config
+	// that silently never reclaims usage records grows without bound.
+	Enabled            *bool         `mapstructure:"enabled"`
 	Interval           time.Duration `mapstructure:"interval"`
 	ExpiredGracePeriod time.Duration `mapstructure:"expired_grace_period"`
 }

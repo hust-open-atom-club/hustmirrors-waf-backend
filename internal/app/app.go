@@ -167,7 +167,11 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 		})
 	}
 
-	if cfg.Cleanup.Enabled && usageStore != nil {
+	// Enabled is a *bool: nil means the key was absent, which applyDefaults
+	// resolves to true. Treat a nil here (config built in code, bypassing
+	// defaults) as enabled for the same reason.
+	cleanupOn := cfg.Cleanup.Enabled == nil || *cfg.Cleanup.Enabled
+	if cleanupOn && usageStore != nil {
 		cleanupCtx, cancel := context.WithCancel(context.Background())
 		a.cleanupStop = cancel
 		a.cleanupWG.Add(1)

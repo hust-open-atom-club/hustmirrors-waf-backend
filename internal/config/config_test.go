@@ -242,3 +242,27 @@ func TestValidationError_Error(t *testing.T) {
 }
 
 func ptrBool(b bool) *bool { return &b }
+
+// TestApplyDefaults_CleanupEnabledDefaultsOn pins that omitting the cleanup
+// block leaves reclamation running. interval and expired_grace_period
+// already defaulted, so a bool Enabled meant the one field without a
+// default silently disabled the loop that used the other two - and expired
+// usage records then accumulated for the life of the process.
+func TestApplyDefaults_CleanupEnabledDefaultsOn(t *testing.T) {
+	c := &Config{}
+	applyDefaults(c)
+	require.NotNil(t, c.Cleanup.Enabled)
+	assert.True(t, *c.Cleanup.Enabled, "an omitted cleanup block must not disable reclamation")
+	assert.Equal(t, 10*time.Minute, c.Cleanup.Interval)
+}
+
+// TestApplyDefaults_CleanupCanBeExplicitlyDisabled ensures the pointer is
+// there to distinguish absent from false, not to force the feature on.
+func TestApplyDefaults_CleanupCanBeExplicitlyDisabled(t *testing.T) {
+	off := false
+	c := &Config{}
+	c.Cleanup.Enabled = &off
+	applyDefaults(c)
+	require.NotNil(t, c.Cleanup.Enabled)
+	assert.False(t, *c.Cleanup.Enabled, "an explicit false must be preserved")
+}
