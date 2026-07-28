@@ -15,7 +15,6 @@ func (s *Server) verifyPow(c echov4.Context) error {
 		OriginalMethod: c.Request().Header.Get("X-Original-Method"),
 		OriginalArgs:   c.Request().Header.Get("X-Original-Args"),
 		RealIP:         c.Request().Header.Get("X-Real-IP"),
-		ForwardedFor:   c.Request().Header.Get("X-Forwarded-For"),
 		UserAgent:      c.Request().Header.Get("User-Agent"),
 		OriginalRange:  c.Request().Header.Get("X-Original-Range"),
 	}
@@ -69,7 +68,43 @@ func writeAuthResult(c echov4.Context, res auth.AuthResult) {
 	h.Set("X-Pow-Result", "deny")
 	h.Set("X-Pow-Error", res.ErrorHeader)
 	h.Set("X-Pow-Reason", res.Reason)
+	// Deny only: an allow needs no explaining, so the hot path stays clean.
+	if t := formatRiskTrace(res.RiskTrace); t != "" {
+		h.Set("X-Pow-Trace", t)
+	}
 	c.NoContent(res.HTTPStatus)
+}
+
+// maxTraceHeaderLen keeps a long chain from inflating every deny response.
+const maxTraceHeaderLen = 512
+
+// formatRiskTrace renders matched steps as "chain:rule", ">" marking a JUMP.
+// Unmatched steps are dropped; rule.preview has the full trace.
+func formatRiskTrace(steps []auth.RiskTraceStep) string {
+	if len(steps) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, s := range steps {
+		if !s.Matched {
+			continue
+		}
+		entry := s.Chain + ":" + s.Rule
+		if s.JumpTo != "" {
+			entry += ">" + s.JumpTo
+		}
+		if b.Len() > 0 {
+			if b.Len()+1+len(entry) > maxTraceHeaderLen {
+				b.WriteString(",...")
+				break
+			}
+			b.WriteByte(',')
+		} else if len(entry) > maxTraceHeaderLen {
+			return entry[:maxTraceHeaderLen] + ",..."
+		}
+		b.WriteString(entry)
+	}
+	return b.String()
 }
 
 func (s *Server) healthz(c echov4.Context) error {
