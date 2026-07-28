@@ -393,3 +393,32 @@ func ExampleComputeSign() {
 	fmt.Println(len(sign))
 	// Output: 64
 }
+
+// TestValidatePayload_AlgorithmFromOptions: the expected hash must come from
+// options, not a hardcoded constant.
+func TestValidatePayload_AlgorithmFromOptions(t *testing.T) {
+	mk := func(alg string) *TokenPayload {
+		return &TokenPayload{
+			Version: 1, Mode: "generic", Algorithm: alg,
+			Path: "/a.iso", Timestamp: 1, ExpiresAt: 2,
+			Difficulty: 22, Counter: "c", Salt: "s",
+		}
+	}
+	opts := &ValidatorOptions{
+		AllowedModes:  []string{"generic"},
+		AllowedSalts:  []string{"s"},
+		MinDifficulty: 1, MaxDifficulty: 64,
+	}
+
+	// Empty Algorithm falls back to the default, so a zero-value options
+	// struct still rejects an unknown hash rather than accepting anything.
+	assert.NoError(t, ValidatePayload(mk("sha256"), opts))
+	assert.ErrorIs(t, ValidatePayload(mk("sha512"), opts), ErrUnsupportedAlgorithm)
+	assert.ErrorIs(t, ValidatePayload(mk(""), opts), ErrUnsupportedAlgorithm)
+
+	// An explicit Algorithm is honoured.
+	withAlg := *opts
+	withAlg.Algorithm = "sha256"
+	assert.NoError(t, ValidatePayload(mk("SHA256"), &withAlg), "case-insensitive")
+	assert.ErrorIs(t, ValidatePayload(mk("md5"), &withAlg), ErrUnsupportedAlgorithm)
+}

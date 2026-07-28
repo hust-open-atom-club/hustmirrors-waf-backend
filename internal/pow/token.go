@@ -81,7 +81,13 @@ type ValidatorOptions struct {
 	RequireIP      bool     // when ip_bound is enabled, require IP
 	MinDifficulty  int
 	MaxDifficulty  int
+	// Algorithm the token's "alg" must name. Empty falls back to
+	// DefaultAlgorithm, so a zero value still rejects an unknown hash.
+	Algorithm string
 }
+
+// DefaultAlgorithm is the only hash ComputeSign and HashCanonical compute.
+const DefaultAlgorithm = "sha256"
 
 // ValidatePayload runs field-level validation but does not check time/expiry;
 // those depend on the current time and per-mode max TTL, enforced separately
@@ -111,7 +117,11 @@ func ValidatePayload(p *TokenPayload, opts *ValidatorOptions) error {
 	if p.Algorithm == "" {
 		return ErrUnsupportedAlgorithm
 	}
-	if !strings.EqualFold(p.Algorithm, "sha256") {
+	wantAlg := DefaultAlgorithm
+	if opts != nil && opts.Algorithm != "" {
+		wantAlg = opts.Algorithm
+	}
+	if !strings.EqualFold(p.Algorithm, wantAlg) {
 		return ErrUnsupportedAlgorithm
 	}
 
