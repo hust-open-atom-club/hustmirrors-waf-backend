@@ -117,3 +117,49 @@ func TestRiskAccept_TokenlessRequestIsNotCharged(t *testing.T) {
 		assert.Zero(t, res.Uses, "a request with no token has no quota to charge")
 	}
 }
+
+// TestRequirePow_ChargesGenericQuota covers the same bypass as
+// TestRiskAccept_ChargesGenericQuota, on the other target that honours a
+// token. REQUIRE_POW returned allow() directly without charging, so a chain
+// written with REQUIRE_POW instead of ACCEPT had no working quota at all -
+// and reported uses=0 with an empty sign id while doing so.
+func TestRequirePow_ChargesGenericQuota(t *testing.T) {
+	cfg := makeBaseConfig()
+	cfg.RiskControl.Enabled = true
+	cfg.Pow.Modes.Generic.MaxUses = 1
+
+	engine, err := risk.NewEngine(risk.ChainMap{
+		"INPUT": {
+			Name:   "INPUT",
+			Policy: risk.Policy{Target: risk.TargetREQUIREPOW, Reason: "need_pow"},
+		},
+	})
+	require.NoError(t, err)
+
+	svc, _, _, mint := makeTestServiceWithEngine(t, cfg, engine)
+	p := findValidCounterForDifficulty(t, pow.TokenPayload{
+		Mode: "generic", Path: "/ubuntu.iso",
+	}, 8)
+	tok, sign := mint(p)
+
+	req := AuthRequest{
+		OriginalURI: "/ubuntu.iso", OriginalMethod: "GET",
+		OriginalArgs: "token=" + tok + "&sign=" + sign, RealIP: "1.2.3.4",
+	}
+
+	first := svc.Verify(context.Background(), req)
+	require.True(t, first.Allowed, "reason=%s", first.Reason)
+	assert.Equal(t, ReasonRequirePowPass, first.Reason)
+	assert.Equal(t, 1, first.Uses, "the charge must be reported back")
+	assert.Equal(t, 1, first.MaxUses)
+	assert.NotEmpty(t, first.SignID, "sign id must reach the response headers")
+
+	allowed := 1
+	for i := 0; i < 9; i++ {
+		if svc.Verify(context.Background(), req).Allowed {
+			allowed++
+		}
+	}
+	assert.Equal(t, 1, allowed, "max_uses=1 must permit exactly one download")
+	assert.Equal(t, ReasonUsedUp, svc.Verify(context.Background(), req).Reason)
+}

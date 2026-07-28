@@ -275,7 +275,17 @@ func (s *Service) runRiskEngine(ctx context.Context, vctx *verifyCtx, riskReq *r
 		var res AuthResult
 		switch powStatus {
 		case "valid":
+			// REQUIRE_POW honours the token just as ACCEPT does, so it owes
+			// the same quota charge. Omitting it let a generic token be
+			// redeemed without limit whenever a chain used REQUIRE_POW
+			// instead of ACCEPT.
+			if denied, isDenied := s.chargeQuotaForRiskAllow(ctx, vctx, riskReq); isDenied {
+				return denied, true
+			}
 			res = allow(ReasonRequirePowPass, riskReq.PowMode)
+			res.SignID = vctx.signID
+			res.Uses = vctx.uses
+			res.MaxUses = vctx.maxUses
 		case "missing":
 			res = deny(ReasonMissingTokenOrSign)
 		case "unverifiable":
