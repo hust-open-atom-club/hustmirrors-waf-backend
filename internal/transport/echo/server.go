@@ -82,10 +82,18 @@ func NewAdmin(opts AdminOptions) *Server {
 		logger:   opts.Logger,
 		metrics:  opts.Metrics,
 		adminSvc: opts.AdminSvc,
-		auditLog: admin.NewLogAuditLogger(opts.Logger),
+		auditLog: buildAuditLogger(opts.Config, opts.Logger),
 	}
 	s.registerAdminRoutes()
 	return s
+}
+
+// buildAuditLogger honours admin.audit_log; nil means absent, i.e. on.
+func buildAuditLogger(cfg *config.Config, logger logging.Logger) admin.AuditLogger {
+	if cfg != nil && cfg.Admin.AuditLog != nil && !*cfg.Admin.AuditLog {
+		return admin.NopAuditLogger{}
+	}
+	return admin.NewLogAuditLogger(logger)
 }
 
 func (s *Server) Start(listen string) error {

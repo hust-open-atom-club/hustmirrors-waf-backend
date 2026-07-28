@@ -23,6 +23,11 @@ func applyDefaults(c *Config) {
 		c.Server.ShutdownTimeout = parseDur("5s")
 	}
 
+	// Omitting the master switch must not disable verification.
+	if c.Pow.Enabled == nil {
+		on := true
+		c.Pow.Enabled = &on
+	}
 	if c.Pow.TokenParam == "" {
 		c.Pow.TokenParam = "token"
 	}
@@ -87,9 +92,21 @@ func applyDefaults(c *Config) {
 	if c.Logging.Format == "" {
 		c.Logging.Format = "json"
 	}
+	if c.Logging.LogAccess == nil {
+		on := true
+		c.Logging.LogAccess = &on
+	}
+	if c.Logging.LogDenied == nil {
+		on := true
+		c.Logging.LogDenied = &on
+	}
 
 	if c.Admin.Listen == "" {
 		c.Admin.Listen = "127.0.0.1:8081"
+	}
+	if c.Admin.AuditLog == nil {
+		on := true
+		c.Admin.AuditLog = &on
 	}
 
 	if c.Cleanup.Enabled == nil {

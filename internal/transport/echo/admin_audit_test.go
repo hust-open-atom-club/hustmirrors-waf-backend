@@ -124,3 +124,23 @@ func TestAdminAudit_ActorFromBasicAuth(t *testing.T) {
 	assert.NotContains(t, events2[0].Actor, "secret-token-value",
 		"the credential must never reach the audit trail")
 }
+
+// TestAdminAudit_HonoursConfigSwitch: admin.audit_log had no readers, so
+// auditing could not be turned off. Absent still means on.
+func TestAdminAudit_HonoursConfigSwitch(t *testing.T) {
+	newServer := func(auditLog *bool) *Server {
+		cfg := &config.Config{}
+		cfg.Admin.Auth.Type = "none"
+		cfg.Admin.AuditLog = auditLog
+		asvc, err := admin.New(admin.Options{Config: cfg})
+		require.NoError(t, err)
+		return NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
+	}
+
+	off, on := false, true
+	assert.IsType(t, admin.NopAuditLogger{}, newServer(&off).auditLog,
+		"audit_log: false must disable recording")
+	assert.IsType(t, &admin.LogAuditLogger{}, newServer(&on).auditLog)
+	assert.IsType(t, &admin.LogAuditLogger{}, newServer(nil).auditLog,
+		"an omitted audit_log must not silently disable auditing")
+}
