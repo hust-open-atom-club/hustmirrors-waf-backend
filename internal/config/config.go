@@ -22,9 +22,12 @@ type ServerConfig struct {
 }
 
 type PowConfig struct {
-	Enabled   bool `mapstructure:"enabled"`
-	DryRun    bool `mapstructure:"dry_run"`
-	BypassAll bool `mapstructure:"bypass_all"`
+	// Enabled is the master switch: false means no token is parsed or
+	// checked and the risk engine decides alone. Pointer so an omitted key
+	// (-> true) differs from an explicit false.
+	Enabled   *bool `mapstructure:"enabled"`
+	DryRun    bool  `mapstructure:"dry_run"`
+	BypassAll bool  `mapstructure:"bypass_all"`
 
 	TokenParam string `mapstructure:"token_param"`
 	SignParam  string `mapstructure:"sign_param"`
@@ -46,11 +49,13 @@ type ModesConfig struct {
 }
 
 type ModeConfig struct {
-	Enabled          bool `mapstructure:"enabled"`
-	MinDifficulty    int  `mapstructure:"min_difficulty"`
-	MaxDifficulty    int  `mapstructure:"max_difficulty"`
-	MaxTTLSeconds    int  `mapstructure:"max_ttl_seconds"`
-	RequireIP        bool `mapstructure:"require_ip"`
+	Enabled       bool `mapstructure:"enabled"`
+	MinDifficulty int  `mapstructure:"min_difficulty"`
+	MaxDifficulty int  `mapstructure:"max_difficulty"`
+	MaxTTLSeconds int  `mapstructure:"max_ttl_seconds"`
+	RequireIP     bool `mapstructure:"require_ip"`
+	// CountUsage exists only so validation can reject it: metering follows
+	// from the mode, not a flag. See Validate.
 	CountUsage       bool `mapstructure:"count_usage"`
 	MaxUses          int  `mapstructure:"max_uses"`
 	CountHeadRequest bool `mapstructure:"count_head_request"`
@@ -160,7 +165,9 @@ type AdminConfig struct {
 	Listen     string     `mapstructure:"listen"`
 	Auth       AuthConfig `mapstructure:"auth"`
 	AllowCIDRs []string   `mapstructure:"allow_cidrs"`
-	AuditLog   bool       `mapstructure:"audit_log"`
+	// AuditLog records admin actions. Pointer so an omitted key (-> true)
+	// differs from an explicit false.
+	AuditLog *bool `mapstructure:"audit_log"`
 }
 
 type AuthConfig struct {
@@ -172,10 +179,13 @@ type AuthConfig struct {
 }
 
 type LoggingConfig struct {
-	Level     string `mapstructure:"level"`  // debug | info | warn | error
-	Format    string `mapstructure:"format"` // json | console
-	LogAccess bool   `mapstructure:"log_access"`
-	LogDenied bool   `mapstructure:"log_denied"`
+	Level  string `mapstructure:"level"`  // debug | info | warn | error
+	Format string `mapstructure:"format"` // json | console
+	// Which pow_verify outcomes reach the log. Metrics are unconditional,
+	// so silencing one cannot blind monitoring. Pointers so an omitted key
+	// (-> true) differs from an explicit false.
+	LogAccess *bool  `mapstructure:"log_access"`
+	LogDenied *bool  `mapstructure:"log_denied"`
 	HashIP    bool   `mapstructure:"hash_ip"`
 	LogSalt   string `mapstructure:"log_salt"`
 }

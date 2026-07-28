@@ -111,6 +111,15 @@ PoW 校验。链的入口是 `INPUT`，支持 `ACCEPT` / `REJECT` / `RATE_LIMIT`
 > `pow_status` 由 `classifyPoW` 产出，它与 PoW-only 路径共用同一套校验函数。
 > 换句话说：PoW-only 路径会拒绝的 token，风控路径也不会判为 `valid`。
 
+被风控拒绝的响应会带 `X-Pow-Trace`，格式为 `链:规则` 以 `,` 连接，`>` 表示 JUMP：
+
+```
+X-Pow-Trace: INPUT:missing-pow>RISK_CHECK,RISK_CHECK:too-many-1h
+```
+
+只记录**命中**的规则，超长会截断并以 `,...` 结尾。完整 trace（含未命中项）可通过
+管理 API 的 `rule.preview` 获取。
+
 > `generic` 模式的 `max_uses` 在**所有**放行路径上生效——`ACCEPT`、`RATE_LIMIT`
 > 和 `REQUIRE_POW` 都会扣减配额，命中规则不等于跳过配额。
 
@@ -256,19 +265,37 @@ print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 | 字段 | 默认值 | 说明 |
 |---|---|---|
 | `server.listen` | `127.0.0.1:8080` | 监听地址（不要暴露公网） |
+| `pow.enabled` | `true` | PoW 验证总开关。`false` 时不解析也不校验 token，交由风控链决定 |
 | `pow.dry_run` | `false` | dry-run：记录但放行 |
-| `pow.bypass_all` | `false` | 紧急放行开关 |
-| `pow.modes.ip_bound` | enabled, d=22, ttl=24h | 绑定 IP 长效模式 |
-| `pow.modes.generic` | enabled, d=22, ttl=30m, max_uses=5 | 通用短效模式 |
+| `pow.bypass_all` | `false` | 紧急放行开关，无条件 200 |
+| `pow.algorithm` | `sha256` | 仅实现 `sha256`，填其他值启动即报错 |
+| `pow.modes.ip_bound` | enabled, d=22, ttl=24h | 绑定 IP 长效模式，不计量 |
+| `pow.modes.generic` | enabled, d=22, ttl=30m, max_uses=5 | 通用短效模式，按 `max_uses` 计量 |
 | `storage.driver` | `memory` | `memory` / `postgres` / `redis` |
 | `storage.counter_driver` | `memory` | `memory` / `redis` |
 | `risk_control.enabled` | `true` | 风控规则链 |
-| `cleanup.enabled` | `true` | 过期记录回收（省略该段即为开启） |
+| `cleanup.enabled` | `true` | 过期记录回收 |
+| `logging.log_access` | `true` | 是否记录放行结果的日志 |
+| `logging.log_denied` | `true` | 是否记录拒绝结果的日志 |
 | `admin.enabled` | `false` | 管理 API |
+| `admin.audit_log` | `true` | 是否记录管理操作审计 |
+
+以上默认值为 `true` 的布尔开关都是「省略即开启」——配置里不写不会把它们关掉。
+
+> **`pow.enabled` 与 `bypass_all` 不同**：前者只跳过 PoW 校验，风控规则照常生效
+> （一条 `REJECT` 规则仍会拒绝）；后者无条件放行一切。想临时停用 PoW 用前者，
+> 想紧急全放通用后者。
 
 > `admin.enabled=true` 时必须显式写 `admin.auth.type`。留空会被配置校验拒绝，
 > 避免管理接口在无认证状态下启动。`type: none` 仅在监听 loopback
 > 或配置了 `allow_cidrs` 时接受。
+
+> `logging.log_*` 只影响日志，**不影响指标**——关掉日志不会让监控失明。
+> 5xx 无论如何都记录，因为那是服务自身故障而非对请求的判定。
+
+> 以下字段不被支持，配置里出现会被校验拒绝而非静默忽略：
+> `pow.modes.*.count_usage`（是否计量由模式本身决定，用 `max_uses` 控制上限）、
+> `risk_control.chains.*.rules[].match.risk_score_gte`（无组件产出风险分）。
 
 环境变量覆盖（前缀 `MIRRORS_WAF_`，分隔符 `__`）：
 
