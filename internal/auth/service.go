@@ -148,6 +148,10 @@ func (s *Service) Verify(ctx context.Context, req AuthRequest) AuthResult {
 
 	protected := s.matcher.ShouldProtect(req.OriginalURI)
 	tokenRaw, sign := s.extractTokenAndSign(req.OriginalArgs)
+	// chargeQuotaForRiskAllow reads these off vctx. Leaving them unset made
+	// it derive the sign id from an empty sign, so the risk-allow path and
+	// the PoW-only path keyed the same token to two different usage records.
+	vctx.tokenRaw, vctx.sign = tokenRaw, sign
 
 	riskReq := &risk.RequestContext{
 		Path:           req.OriginalURI,
