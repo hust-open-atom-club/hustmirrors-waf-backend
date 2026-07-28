@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -13,10 +14,16 @@ import (
 
 // CounterStore implements storage.CounterStore using Redis INCR with EXPIRE.
 // The key includes the bucket start time so each window is a separate key.
+//
+// closed is mutex-guarded: Close runs on the shutdown goroutine while
+// in-flight requests are still reading the flag, which is a data race
+// without it. The memory store has always done this; the redis one did not.
 type CounterStore struct {
 	client    redis.Cmdable
 	keyPrefix string
-	closed    bool
+
+	mu     sync.Mutex
+	closed bool
 }
 
 func NewCounterStore(client redis.Cmdable, keyPrefix string) *CounterStore {
@@ -90,9 +97,18 @@ func (s *CounterStore) Reset(ctx context.Context, name, key string, window time.
 	return nil
 }
 
-func (s *CounterStore) Close() error { s.closed = true; return nil }
+func (s *CounterStore) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closed = true
+	return nil
+}
 
-func (s *CounterStore) isClosed() bool { return s.closed }
+func (s *CounterStore) isClosed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closed
+}
 
 func (s *CounterStore) counterKey(name, key string, bucketStart int64) string {
 	return s.keyPrefix + ":risk:counter:" + name + ":" + key + ":" + itoa(bucketStart)

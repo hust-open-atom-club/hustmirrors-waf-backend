@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -13,17 +14,16 @@ import (
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/storage"
 )
 
+// UsageStore borrows a pool it does not own; the app layer opens it and
+// closes it. Close therefore only marks the store unusable.
+//
+// closed is mutex-guarded: Close runs on the shutdown goroutine while
+// in-flight requests still read the flag through isClosed.
 type UsageStore struct {
-	pool   *pgxpool.Pool
-	closed bool
-}
+	pool *pgxpool.Pool
 
-func NewUsageStore(ctx context.Context, dsn string) (*UsageStore, error) {
-	pool, err := OpenPool(ctx, PoolConfig{DSN: dsn})
-	if err != nil {
-		return nil, err
-	}
-	return &UsageStore{pool: pool}, nil
+	mu     sync.Mutex
+	closed bool
 }
 
 func NewUsageStoreFromPool(pool *pgxpool.Pool) *UsageStore {
@@ -159,14 +159,15 @@ func (s *UsageStore) CountActive(ctx context.Context) (int64, error) {
 }
 
 func (s *UsageStore) Close() error {
-	if s.isClosed() {
-		return nil
-	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.closed = true
 	return nil
 }
 
 func (s *UsageStore) isClosed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.closed
 }
 

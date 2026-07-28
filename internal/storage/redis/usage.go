@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -12,10 +13,14 @@ import (
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/storage"
 )
 
+// closed is mutex-guarded for the same reason as in CounterStore: Close
+// runs on the shutdown goroutine while requests are still reading it.
 type UsageStore struct {
 	client    redis.Cmdable
 	keyPrefix string
-	closed    bool
+
+	mu     sync.Mutex
+	closed bool
 }
 
 func NewUsageStore(client redis.Cmdable, keyPrefix string) *UsageStore {
@@ -134,9 +139,18 @@ func (s *UsageStore) CleanupExpired(_ context.Context, _ int64) (int, error) {
 	return 0, nil
 }
 
-func (s *UsageStore) Close() error { s.closed = true; return nil }
+func (s *UsageStore) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closed = true
+	return nil
+}
 
-func (s *UsageStore) isClosed() bool { return s.closed }
+func (s *UsageStore) isClosed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closed
+}
 
 func (s *UsageStore) usageKey(id string) string {
 	return s.keyPrefix + ":pow:usage:" + id

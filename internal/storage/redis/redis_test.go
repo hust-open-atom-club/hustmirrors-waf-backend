@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -133,4 +134,45 @@ func TestUsageStore_AlreadyExpired(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, r.Allowed)
 	assert.Equal(t, "expired", r.Reason)
+}
+
+// TestStores_ConcurrentCloseIsSafe exercises Close racing against in-flight
+// requests, which is exactly what happens on shutdown.
+//
+// closed used to be a plain bool written by Close and read by every
+// operation, i.e. a data race. The memory store had always guarded it with
+// a mutex; these two had not.
+//
+// Note: the race detector needs CGO, which is unavailable on this machine,
+// so this test verifies observable behaviour (no panic, ErrClosed after
+// close) rather than proving the absence of a race.
+func TestStores_ConcurrentCloseIsSafe(t *testing.T) {
+	client, stop := startMiniRedis(t)
+	defer stop()
+
+	usage := NewUsageStore(client, "concurrency-test")
+	counter := NewCounterStore(client, "concurrency-test")
+
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, _, _ = counter.Incr(context.Background(), "req", "1.2.3.4", time.Minute)
+		}()
+		go func() {
+			defer wg.Done()
+			_, _ = usage.Get(context.Background(), "some-id")
+		}()
+	}
+	wg.Add(2)
+	go func() { defer wg.Done(); _ = usage.Close() }()
+	go func() { defer wg.Done(); _ = counter.Close() }()
+	wg.Wait()
+
+	// After Close both stores must consistently report ErrClosed.
+	_, err := usage.Get(context.Background(), "x")
+	require.ErrorIs(t, err, storage.ErrClosed)
+	_, _, err = counter.Incr(context.Background(), "req", "1.2.3.4", time.Minute)
+	require.ErrorIs(t, err, storage.ErrClosed)
 }
