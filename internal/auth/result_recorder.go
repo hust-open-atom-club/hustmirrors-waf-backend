@@ -58,6 +58,12 @@ func (s *Service) recordResult(vctx verifyCtx, res AuthResult) {
 			WithLabelValues(res.Mode).
 			Observe(elapsed.Seconds())
 	}
+	// Metrics above are unconditional, so silencing the log cannot blind
+	// monitoring.
+	if !s.shouldLogResult(res) {
+		return
+	}
+
 	lvl := "info"
 	if !res.Allowed {
 		if res.HTTPStatus >= 500 {
@@ -103,6 +109,19 @@ func (s *Service) recordResult(vctx verifyCtx, res AuthResult) {
 	default:
 		s.logger.Info(context.Background(), "pow_verify", all...)
 	}
+}
+
+// shouldLogResult applies logging.log_access and log_denied. A 5xx is always
+// logged: that is a fault here, not a verdict, and hiding it would mask
+// outages. nil means absent, i.e. on.
+func (s *Service) shouldLogResult(res AuthResult) bool {
+	if res.HTTPStatus >= 500 {
+		return true
+	}
+	if res.Allowed {
+		return s.cfg.Logging.LogAccess == nil || *s.cfg.Logging.LogAccess
+	}
+	return s.cfg.Logging.LogDenied == nil || *s.cfg.Logging.LogDenied
 }
 
 func (s *Service) maybeHashIP(ip string) string {
