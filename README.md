@@ -98,16 +98,21 @@ PoW 校验。链的入口是 `INPUT`，支持 `ACCEPT` / `REJECT` / `RATE_LIMIT`
 |---|---|
 | `missing` | 没带 token |
 | `valid` | token 合法且已通过全部校验 |
-| `invalid` | 签名不符、难度不够、path 不匹配等 |
+| `invalid` | 签名不符、难度不够、path 不匹配、TTL 超过 `max_ttl_seconds` 等 |
 | `expired` | 已过期 |
+| `mode_disabled` | token 本身合法，但对应模式已被 `enabled: false` 关闭 |
 | `unverifiable` | token 本身合法，但**无法校验**——目前仅指 `ip_bound` token 遇到 `X-Real-IP` 缺失 |
 
-`unverifiable` 单独成一类，是因为它既不是伪造（不该按 `invalid` 惩罚客户端），
-也不能当作通过（放行等于承认一个没人验证过的 IP 绑定）。规则里必须显式拒绝它，
-示例配置已包含该规则。
+后三类都不是伪造，所以没有归入 `invalid`：按 `invalid` 处理会把运维自己的配置变更
+或代理故障报成客户端作弊。但它们同样**不能当作通过**——放行 `unverifiable` 等于承认
+一个没人验证过的 IP 绑定，放行 `mode_disabled` 等于让已关闭的模式继续可用。
+规则里必须显式拒绝，示例配置已包含相应规则。
 
-> `generic` 模式的 `max_uses` 在风控放行路径上同样生效。规则命中 `ACCEPT` 并不
-> 意味着跳过配额扣减。
+> `pow_status` 由 `classifyPoW` 产出，它与 PoW-only 路径共用同一套校验函数。
+> 换句话说：PoW-only 路径会拒绝的 token，风控路径也不会判为 `valid`。
+
+> `generic` 模式的 `max_uses` 在**所有**放行路径上生效——`ACCEPT`、`RATE_LIMIT`
+> 和 `REQUIRE_POW` 都会扣减配额，命中规则不等于跳过配额。
 
 ---
 

@@ -10,11 +10,12 @@ type RequestContext struct {
 	HasToken  bool
 	HasSign   bool
 	// PowStatus is one of: missing, valid, invalid, expired, used_up,
-	// unverifiable.
+	// mode_disabled, unverifiable.
 	//
-	// "unverifiable" means the token is well-formed but a required check
-	// could not run (an ip_bound token with no X-Real-IP). Rules must not
-	// treat it as equivalent to "valid".
+	// The last two are not forgeries - a disabled mode is the operator's own
+	// change, and "unverifiable" is a proxy misconfiguration - which is why
+	// they are distinct from "invalid". Rules must still reject them: neither
+	// may be treated as equivalent to "valid".
 	PowStatus string
 	// PowMode is empty when no token was provided, otherwise "ip_bound"
 	// or "generic".

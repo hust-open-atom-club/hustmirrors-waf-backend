@@ -186,6 +186,16 @@ risk_control:
           status: 500
           reason: "missing_real_ip"
 
+        # "mode_disabled" means the token is fine but its mode was turned
+        # off. Like "unverifiable" it is not a forgery, but leaving it out
+        # of a reject rule would let a disabled mode keep working.
+        - name: "reject disabled mode"
+          match:
+            pow_status: "mode_disabled"
+          target: REJECT
+          status: 403
+          reason: "mode_disabled"
+
         - name: "reject invalid pow"
           match:
             pow_status_in: ["invalid", "expired", "used_up"]
