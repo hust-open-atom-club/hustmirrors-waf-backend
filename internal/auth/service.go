@@ -106,6 +106,7 @@ func New(opts Options) (*Service, error) {
 		RequireIP:      opts.Config.Pow.Modes.IPBound.RequireIP,
 		MinDifficulty:  opts.Config.Pow.Modes.IPBound.MinDifficulty,
 		MaxDifficulty:  opts.Config.Pow.Modes.IPBound.MaxDifficulty,
+		Algorithm:      opts.Config.Pow.Algorithm,
 	}
 	s.genericOpts = pow.ValidatorOptions{
 		AllowedSalts:   s.allowedSalts,
@@ -113,6 +114,7 @@ func New(opts Options) (*Service, error) {
 		AllowedModes:   []string{"generic"},
 		MinDifficulty:  opts.Config.Pow.Modes.Generic.MinDifficulty,
 		MaxDifficulty:  opts.Config.Pow.Modes.Generic.MaxDifficulty,
+		Algorithm:      opts.Config.Pow.Algorithm,
 	}
 
 	return s, nil
@@ -153,6 +155,12 @@ func (s *Service) Verify(ctx context.Context, req AuthRequest) AuthResult {
 	// the PoW-only path keyed the same token to two different usage records.
 	vctx.tokenRaw, vctx.sign = tokenRaw, sign
 
+	// Unlike bypass_all this is not an unconditional allow: risk rules keep
+	// applying, they just never see a pow_status other than "missing".
+	if !s.powEnabled() {
+		return s.verifyWithoutPow(ctx, vctx, req, protected)
+	}
+
 	riskReq := &risk.RequestContext{
 		Path:           req.OriginalURI,
 		Method:         req.OriginalMethod,
@@ -191,6 +199,41 @@ func (s *Service) Verify(ctx context.Context, req AuthRequest) AuthResult {
 		return res
 	}
 	res := s.verifyPoWOnly(ctx, req, tokenRaw, sign, payload, powStatus)
+	s.recordResult(vctx, res)
+	return res
+}
+
+// powEnabled reports whether verification runs. nil means the key was
+// absent, which applyDefaults resolves to true.
+func (s *Service) powEnabled() bool {
+	return s.cfg.Pow.Enabled == nil || *s.cfg.Pow.Enabled
+}
+
+// verifyWithoutPow handles pow.enabled=false: no token is parsed, no quota
+// charged, and the risk engine decides alone.
+func (s *Service) verifyWithoutPow(ctx context.Context, vctx verifyCtx, req AuthRequest, protected bool) AuthResult {
+	if s.riskEngine != nil {
+		riskReq := &risk.RequestContext{
+			Path:           req.OriginalURI,
+			Method:         req.OriginalMethod,
+			Args:           req.OriginalArgs,
+			IP:             req.RealIP,
+			UserAgent:      req.UserAgent,
+			IsProtected:    protected,
+			IsRangeRequest: isRangeRequest(req.OriginalArgs, req.OriginalMethod, req.OriginalRange),
+			// No verification ran, so any other status would be a fiction.
+			PowStatus: "missing",
+		}
+		if res, ok := s.runRiskEngine(ctx, &vctx, riskReq, "missing"); ok {
+			return res
+		}
+		// REQUIRE_POW is unsatisfiable here, and no verdict leaves nothing
+		// to fall back on.
+		res := allowDecision(ReasonPowDisabled, "", DecisionPowDisabled)
+		s.recordResult(vctx, res)
+		return res
+	}
+	res := allowDecision(ReasonPowDisabled, "", DecisionPowDisabled)
 	s.recordResult(vctx, res)
 	return res
 }

@@ -10,16 +10,23 @@ const (
 	DecisionBypass             = "bypass"
 	// DecisionDryRun: dry-run mode rewrote a deny to an allow.
 	DecisionDryRun = "dry_run"
+	// DecisionPowDisabled: pow.enabled=false, so no verification ran and
+	// the risk engine alone decided. Distinct from DecisionBypass, which
+	// means nothing decided at all.
+	DecisionPowDisabled = "pow_disabled"
 )
 
 // Reason constants. These appear in the X-Pow-Reason / X-Pow-Error headers
 // and in the structured log line.
 const (
-	ReasonNotProtected      = "not_protected"
-	ReasonIPBoundValid      = "ip_bound_valid"
-	ReasonGenericValid      = "generic_valid"
-	ReasonDryRunAllow       = "dry_run_allow"
-	ReasonBypassAll         = "bypass_all"
+	ReasonNotProtected = "not_protected"
+	ReasonIPBoundValid = "ip_bound_valid"
+	ReasonGenericValid = "generic_valid"
+	ReasonDryRunAllow  = "dry_run_allow"
+	ReasonBypassAll    = "bypass_all"
+	// ReasonPowDisabled: pow.enabled=false and risk control is off, so
+	// there was nothing left to decide the request.
+	ReasonPowDisabled       = "pow_disabled"
 	ReasonRiskAccept        = "risk_accept"
 	ReasonRiskRateLimit     = "risk_rate_limit"
 	ReasonRequirePowPass    = "require_pow_pass"
@@ -67,7 +74,7 @@ const (
 func statusForReason(reason string) int {
 	switch reason {
 	case ReasonNotProtected, ReasonIPBoundValid, ReasonGenericValid,
-		ReasonDryRunAllow, ReasonBypassAll,
+		ReasonDryRunAllow, ReasonBypassAll, ReasonPowDisabled,
 		ReasonRiskAccept, ReasonRiskRateLimit, ReasonRequirePowPass:
 		return 200
 	case ReasonRateLimited, ReasonRiskTooMany:
