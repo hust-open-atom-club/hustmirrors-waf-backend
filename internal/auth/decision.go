@@ -76,6 +76,8 @@ func powStatusToReason(status string) string {
 		return ReasonUsedUp
 	case "unverifiable":
 		return ReasonMissingRealIP
+	case "mode_disabled":
+		return ReasonModeDisabled
 	}
 	return ReasonSignMismatch
 }

@@ -13,16 +13,57 @@ import (
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/storage"
 )
 
+// validateForMode runs every mode-dependent check a token must pass before
+// it can be honoured, and is the single definition of "this token is good".
+//
+// Both entry points call it: verifyPoWOnly to decide the response directly,
+// and classifyPoW to produce the pow_status the risk engine matches on.
+// They used to check different things - classifyPoW omitted mode.enabled,
+// max_ttl and the future-timestamp guard - so the same token could be
+// rejected on one path and accepted on the other. Keeping the checks in one
+// function is what stops that drifting apart again.
+//
+// Returns ("", true) when the token passes. On failure the reason is the
+// X-Pow-Error value; callers map it to a status or a pow_status.
+func (s *Service) validateTokenForMode(p *pow.TokenPayload, mode, path, signValue string, now int64) (string, bool) {
+	mc, ok := s.modeConfig(mode)
+	if !ok {
+		return ReasonUnsupportedMode, false
+	}
+	// modeConfig's bool only reports "this is a known mode name"; whether
+	// the operator enabled it is a separate field.
+	if !mc.enabled {
+		return ReasonModeDisabled, false
+	}
+	// Field validation: version, algorithm, path format, IP rules, counter
+	// charset, difficulty range, salt whitelist.
+	if err := pow.ValidatePayload(p, &mc.opts); err != nil {
+		return reasonFromValidationError(err), false
+	}
+	if p.Path != path {
+		return ReasonPathMismatch, false
+	}
+	// Time checks need the current time and the per-mode TTL cap, so
+	// ValidatePayload cannot do them.
+	if reason, ok := s.checkTime(p, mc.maxTTL, now); !ok {
+		return reason, false
+	}
+	if reason, ok := checkSignAndDifficulty(p, signValue); !ok {
+		return reason, false
+	}
+	return "", true
+}
+
 // verifyPoWOnly runs the PoW-only flow: the fallback when risk control is
 // disabled, and the implementation that REQUIRE_POW conceptually defers to.
-func (s *Service) verifyPoWOnly(ctx context.Context, req AuthRequest, tokenRaw, sign string, payload *pow.TokenPayload, powStatus string) AuthResult {
-	if tokenRaw == "" || sign == "" {
+func (s *Service) verifyPoWOnly(ctx context.Context, req AuthRequest, tokenRaw, signValue string, payload *pow.TokenPayload, powStatus string) AuthResult {
+	if tokenRaw == "" || signValue == "" {
 		return s.maybeDryRun(ctx, deny(ReasonMissingTokenOrSign))
 	}
 	if len(tokenRaw) > s.cfg.Pow.MaxTokenLength {
 		return s.maybeDryRun(ctx, deny(ReasonTokenTooLong))
 	}
-	if len(sign) > s.cfg.Pow.MaxSignLength {
+	if len(signValue) > s.cfg.Pow.MaxSignLength {
 		return s.maybeDryRun(ctx, deny(ReasonSignTooLong))
 	}
 	if payload == nil {
@@ -30,35 +71,12 @@ func (s *Service) verifyPoWOnly(ctx context.Context, req AuthRequest, tokenRaw, 
 	}
 
 	mode := payload.Mode
-	mc, ok := s.modeConfig(mode)
-	if !ok {
-		return s.maybeDryRun(ctx, denyMode(ReasonUnsupportedMode, mode))
-	}
-	if !mc.enabled {
-		return s.maybeDryRun(ctx, denyMode(ReasonModeDisabled, mode))
-	}
-
-	// Full field validation: version, algorithm, path format, IP rules,
-	// counter charset, difficulty range, salt whitelist. This runs in
-	// classifyPoW too, so both paths enforce the same rules.
-	if err := pow.ValidatePayload(payload, &mc.opts); err != nil {
-		return s.maybeDryRun(ctx, denyMode(reasonFromValidationError(err), mode))
-	}
-
-	if payload.Path != req.OriginalURI {
-		return s.maybeDryRun(ctx, denyMode(ReasonPathMismatch, mode))
-	}
-
 	now := s.clock.Now().Unix()
-	if reason, ok := s.checkTime(payload, mc.maxTTL, now); !ok {
+	if reason, ok := s.validateTokenForMode(payload, mode, req.OriginalURI, signValue, now); !ok {
 		return s.maybeDryRun(ctx, denyMode(reason, mode))
 	}
 
-	if reason, ok := checkSignAndDifficulty(payload, sign); !ok {
-		return s.maybeDryRun(ctx, denyMode(reason, mode))
-	}
-
-	return s.finalizeByMode(ctx, req, payload, tokenRaw, sign, mode, now)
+	return s.finalizeByMode(ctx, req, payload, tokenRaw, signValue, mode, now)
 }
 
 // checkSignAndDifficulty runs the three sign/difficulty checks shared by
@@ -179,15 +197,26 @@ func (s *Service) finalizeGeneric(ctx context.Context, p *pow.TokenPayload, req 
 
 // classifyPoW does a side-effect-free classification for the risk engine's
 // pre-evaluation. It returns (payload, pow_status, pow_mode) where
-// pow_status is one of: missing, valid, invalid, expired, unverifiable.
+// pow_status is one of: missing, valid, invalid, expired, mode_disabled,
+// unverifiable.
 //
-// "unverifiable" means the token itself is well-formed but a required
-// check could not be performed - currently only an ip_bound token when
-// X-Real-IP is absent. It must never be treated as "valid": the
-// REQUIRE_POW target consumes this status directly and would otherwise
-// admit a token bound to somebody else's address.
-func (s *Service) classifyPoW(ctx context.Context, tokenRaw, sign, path, realIP string) (*pow.TokenPayload, string, string) {
-	if len(tokenRaw) > s.cfg.Pow.MaxTokenLength || len(sign) > s.cfg.Pow.MaxSignLength {
+// It shares validateTokenForMode with verifyPoWOnly so the two cannot
+// disagree about whether a token is good. The risk engine acts on this
+// verdict and, for ACCEPT and REQUIRE_POW, no later gate re-checks it.
+//
+// The statuses that are not "invalid" exist because the cause is not a
+// forged token and rules may reasonably want to treat them differently:
+//
+//   - expired: the client simply needs to re-solve.
+//   - mode_disabled: the operator turned this mode off. Nothing is wrong
+//     with the token, so blaming the client would be misleading.
+//   - unverifiable: a required check could not run - currently only an
+//     ip_bound token when X-Real-IP is absent, i.e. a proxy
+//     misconfiguration.
+//
+// None of them may be treated as "valid".
+func (s *Service) classifyPoW(ctx context.Context, tokenRaw, signValue, path, realIP string) (*pow.TokenPayload, string, string) {
+	if len(tokenRaw) > s.cfg.Pow.MaxTokenLength || len(signValue) > s.cfg.Pow.MaxSignLength {
 		return nil, "invalid", ""
 	}
 	payload, err := pow.DecodeToken(tokenRaw)
@@ -195,23 +224,12 @@ func (s *Service) classifyPoW(ctx context.Context, tokenRaw, sign, path, realIP 
 		return nil, "invalid", ""
 	}
 	mode := payload.Mode
-	mc, ok := s.modeConfig(mode)
-	if !ok {
-		return payload, "invalid", mode
-	}
-	if err := pow.ValidatePayload(payload, &mc.opts); err != nil {
-		return payload, "invalid", mode
-	}
-	if payload.Path != path {
-		return payload, "invalid", mode
-	}
 	now := s.clock.Now().Unix()
-	if payload.ExpiresAt <= now {
-		return payload, "expired", mode
+
+	if reason, ok := s.validateTokenForMode(payload, mode, path, signValue, now); !ok {
+		return payload, statusForValidationReason(reason), mode
 	}
-	if _, ok := checkSignAndDifficulty(payload, sign); !ok {
-		return payload, "invalid", mode
-	}
+
 	if mode == "ip_bound" {
 		// An absent X-Real-IP is a proxy misconfiguration, not a forged
 		// token, so this is deliberately distinct from "invalid" - but it
@@ -225,6 +243,19 @@ func (s *Service) classifyPoW(ctx context.Context, tokenRaw, sign, path, realIP 
 		}
 	}
 	return payload, "valid", mode
+}
+
+// statusForValidationReason maps a validateTokenForMode failure onto the
+// pow_status a rule can match. Anything without a dedicated status is
+// "invalid", which is the safe default: it denies.
+func statusForValidationReason(reason string) string {
+	switch reason {
+	case ReasonExpired:
+		return "expired"
+	case ReasonModeDisabled:
+		return "mode_disabled"
+	}
+	return "invalid"
 }
 
 // modeConfig bundles per-mode runtime config so the auth code doesn't
