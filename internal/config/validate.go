@@ -5,6 +5,8 @@ import (
 	"net"
 	"regexp"
 	"strings"
+
+	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/pow"
 )
 
 // ValidationError carries one or more configuration problems.
@@ -35,6 +37,16 @@ func Validate(c *Config) error {
 
 	e.checkModeDifficulty("ip_bound", c.Pow.Modes.IPBound)
 	e.checkModeDifficulty("generic", c.Pow.Modes.Generic)
+
+	// Metering follows from the mode, so the flag cannot mean anything:
+	// "generic with count_usage: false" is a contradiction, not a setting.
+	if c.Pow.Modes.IPBound.CountUsage {
+		e.add("pow.modes.ip_bound.count_usage is not supported; ip_bound is never metered")
+	}
+	if c.Pow.Modes.Generic.CountUsage {
+		e.add("pow.modes.generic.count_usage is not supported; " +
+			"generic is always metered - use max_uses to set the cap")
+	}
 
 	if c.Pow.Modes.IPBound.Enabled && c.Pow.Modes.IPBound.MaxTTLSeconds <= 0 {
 		e.add("pow.modes.ip_bound.max_ttl_seconds must be > 0")
@@ -74,6 +86,12 @@ func Validate(c *Config) error {
 	}
 	if c.Storage.Driver == "redis" && c.Storage.Redis.Addr == "" {
 		e.add("storage.redis.addr is required when storage.driver=redis")
+	}
+
+	// Only SHA-256 is implemented; naming another hash would be accepted
+	// here and then ignored by the verifier.
+	if c.Pow.Algorithm != "" && !strings.EqualFold(c.Pow.Algorithm, pow.DefaultAlgorithm) {
+		e.add("pow.algorithm %q is not implemented (only %q is)", c.Pow.Algorithm, pow.DefaultAlgorithm)
 	}
 
 	if c.Pow.TokenParam == "" {
@@ -182,10 +200,8 @@ func (e *ValidationError) checkRiskControl(rc RiskControlConfig) {
 		if ctr.Window <= 0 {
 			e.add("risk_control.counters.%s: window must be > 0", name)
 		}
-		// counterKey in risk/counter.go handles exactly these three; any
-		// other value makes it return "", which silently skips the counter
-		// at runtime. A typo would otherwise validate cleanly and then
-		// never increment.
+		// counterKey handles exactly these three; anything else returns ""
+		// and silently skips the counter at runtime.
 		switch ctr.Key {
 		case "ip", "path", "ip_path":
 		case "":
@@ -257,16 +273,17 @@ func isLoopbackListen(listen string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// policy=true means we are validating a chain policy target
-// (JUMP/RETURN/LOG/MARK are not valid as a policy).
+// isValidTarget mirrors risk.IsValid{Rule,Policy}Target, which cannot be
+// called directly: risk imports config, so the reverse is an import cycle.
+// TestTargetValidators_MatchConfigValidation keeps the two in step.
+//
+// policy=true rejects JUMP/RETURN/LOG/MARK, which are not terminal.
 func isValidTarget(t string, policy bool) bool {
 	switch t {
 	case "ACCEPT", "REJECT", "RATE_LIMIT", "TOO_MANY", "REQUIRE_POW":
 		return true
 	case "JUMP", "RETURN", "LOG", "MARK":
 		return !policy
-	case "":
-		return false
 	}
 	return false
 }

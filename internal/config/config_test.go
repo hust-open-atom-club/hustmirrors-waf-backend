@@ -325,11 +325,9 @@ func TestValidate_AdminNoneRequiresConfinedListener(t *testing.T) {
 	})
 }
 
-// TestValidate_CounterKeyMustBeSupported covers a silent misconfiguration.
-// risk/counter.go's counterKey handles only ip, path and ip_path; anything
-// else returns an empty key, which skips the counter entirely. A typo such
-// as key: "client_ip" therefore validated cleanly and then never
-// incremented, so rules depending on it never fired.
+// TestValidate_CounterKeyMustBeSupported: counterKey handles only ip, path
+// and ip_path; anything else silently skips the counter, so a typo used to
+// validate cleanly and then never increment.
 func TestValidate_CounterKeyMustBeSupported(t *testing.T) {
 	base := func(key string) *Config {
 		c := &Config{}
@@ -356,4 +354,47 @@ func TestValidate_CounterKeyMustBeSupported(t *testing.T) {
 	err = Validate(base(""))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "key must be set")
+}
+
+// TestValidate_AlgorithmMustBeImplemented: pow.algorithm was never read -
+// ValidatePayload compared against a hardcoded "sha256" - so setting
+// "sha512" validated cleanly and changed nothing.
+func TestValidate_AlgorithmMustBeImplemented(t *testing.T) {
+	base := func(alg string) *Config {
+		c := &Config{}
+		applyDefaults(c)
+		c.Pow.Modes.IPBound.Enabled = true
+		c.Pow.Algorithm = alg
+		return c
+	}
+
+	assert.NoError(t, Validate(base("sha256")))
+	assert.NoError(t, Validate(base("SHA256")), "the comparison is case-insensitive")
+
+	err := Validate(base("sha512"))
+	require.Error(t, err, "an unimplemented hash must not validate")
+	assert.Contains(t, err.Error(), "is not implemented")
+}
+
+// TestValidate_CountUsageIsRejected: metering follows from the mode, so the
+// flag has no sensible implementation - only a rejection.
+func TestValidate_CountUsageIsRejected(t *testing.T) {
+	mk := func(mut func(*Config)) *Config {
+		c := &Config{}
+		applyDefaults(c)
+		c.Pow.Modes.IPBound.Enabled = true
+		c.Pow.Modes.Generic.Enabled = true
+		mut(c)
+		return c
+	}
+
+	assert.NoError(t, Validate(mk(func(*Config) {})), "absent count_usage is fine")
+
+	err := Validate(mk(func(c *Config) { c.Pow.Modes.Generic.CountUsage = true }))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "generic.count_usage is not supported")
+
+	err = Validate(mk(func(c *Config) { c.Pow.Modes.IPBound.CountUsage = true }))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ip_bound.count_usage is not supported")
 }

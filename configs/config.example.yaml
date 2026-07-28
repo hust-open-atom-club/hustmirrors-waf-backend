@@ -41,6 +41,8 @@ pow:
   max_token_length: 4096
   max_sign_length: 128
 
+  # Only sha256 is implemented - it is what ComputeSign actually computes.
+  # Any other value is rejected at startup rather than silently ignored.
   algorithm: "sha256"
 
   # Public salt rotates the canonical string so attackers can't precompute
@@ -57,8 +59,8 @@ pow:
       max_difficulty: 28
       max_ttl_seconds: 86400     # 24h
       require_ip: true
-      count_usage: false
-      max_uses: 0                # 0 = unlimited
+      # No max_uses: ip_bound is not metered. The token is tied to one
+      # address instead, which is what limits its reuse.
 
     # Mode B: short-lived, usage-capped. Suitable for copy-paste to
     # headless environments.
@@ -261,11 +263,15 @@ admin:
   allow_cidrs:
     - "127.0.0.1/32"
     - "10.0.0.0/8"
+  # Records admin actions to the structured log (event=admin_audit).
   audit_log: true
 
 logging:
   level: "info"                   # debug | info | warn | error
   format: "json"                  # json | console
+  # Which pow_verify outcomes reach the log. Metrics are emitted either
+  # way, so turning one off reduces volume without blinding monitoring.
+  # A 5xx is always logged: that is a fault here, not a verdict.
   log_access: true
   log_denied: true
   # When hash_ip is true, client IPs in logs are replaced with a
