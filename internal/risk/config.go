@@ -22,7 +22,7 @@ func FromConfig(rc config.RiskControlConfig) (*Engine, error) {
 }
 
 func compileChain(name string, cc config.ChainConfig) (*Chain, error) {
-	if !isValidPolicyTarget(cc.Policy.Target) {
+	if !IsValidPolicyTarget(cc.Policy.Target) {
 		return nil, fmt.Errorf("policy target %q is not a valid policy target", cc.Policy.Target)
 	}
 	chain := &Chain{
@@ -45,7 +45,7 @@ func compileChain(name string, cc config.ChainConfig) (*Chain, error) {
 }
 
 func compileRule(rc config.RuleConfig) (Rule, error) {
-	if !isValidRuleTarget(rc.Target) {
+	if !IsValidRuleTarget(rc.Target) {
 		return Rule{}, fmt.Errorf("target %q is not supported", rc.Target)
 	}
 	m, err := CompileMatcher(MatchConfig{

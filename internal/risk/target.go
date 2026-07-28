@@ -23,7 +23,9 @@ func isTerminal(target string) bool {
 	return false
 }
 
-func isValidRuleTarget(t string) bool {
+// IsValidRuleTarget reports whether a rule may use this target. Exported
+// because config validation needs the same answer.
+func IsValidRuleTarget(t string) bool {
 	switch t {
 	case TargetACCEPT, TargetREJECT, TargetRATELIMIT, TargetTOOMANY,
 		TargetREQUIREPOW, TargetJUMP, TargetRETURN, TargetLOG, TargetMARK:
@@ -32,9 +34,9 @@ func isValidRuleTarget(t string) bool {
 	return false
 }
 
-// isValidPolicyTarget reports whether a string is a valid chain policy
-// target. Policy may not be JUMP/RETURN/LOG/MARK.
-func isValidPolicyTarget(t string) bool {
+// IsValidPolicyTarget reports whether a chain policy may use this target.
+// A policy is the fallthrough verdict, so it must be terminal.
+func IsValidPolicyTarget(t string) bool {
 	switch t {
 	case TargetACCEPT, TargetREJECT, TargetRATELIMIT, TargetTOOMANY, TargetREQUIREPOW:
 		return true
