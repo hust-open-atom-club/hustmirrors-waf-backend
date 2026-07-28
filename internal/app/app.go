@@ -97,7 +97,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 			return nil, fmt.Errorf("app: build risk engine: %w", err)
 		}
 		if counterStore != nil {
-			counterReg = risk.NewCounterRegistry(cfg.RiskControl.Counters, counterStore)
+			counterReg = risk.NewCounterRegistry(cfg.RiskControl.Counters, counterStore).
+				WithLogger(logger)
 		} else {
 			logger.Warn(ctx, "risk_control enabled but no counter store available; counter rules will not fire")
 			counterReg = risk.NewCounterRegistry(cfg.RiskControl.Counters, nil)
