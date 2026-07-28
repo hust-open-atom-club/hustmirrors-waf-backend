@@ -182,8 +182,16 @@ func (e *ValidationError) checkRiskControl(rc RiskControlConfig) {
 		if ctr.Window <= 0 {
 			e.add("risk_control.counters.%s: window must be > 0", name)
 		}
-		if ctr.Key == "" {
+		// counterKey in risk/counter.go handles exactly these three; any
+		// other value makes it return "", which silently skips the counter
+		// at runtime. A typo would otherwise validate cleanly and then
+		// never increment.
+		switch ctr.Key {
+		case "ip", "path", "ip_path":
+		case "":
 			e.add("risk_control.counters.%s: key must be set", name)
+		default:
+			e.add("risk_control.counters.%s: key %q is not supported (use ip, path or ip_path)", name, ctr.Key)
 		}
 		switch ctr.Storage {
 		case "", "memory", "redis":

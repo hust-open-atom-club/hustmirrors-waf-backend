@@ -324,3 +324,36 @@ func TestValidate_AdminNoneRequiresConfinedListener(t *testing.T) {
 		assert.NoError(t, Validate(c))
 	})
 }
+
+// TestValidate_CounterKeyMustBeSupported covers a silent misconfiguration.
+// risk/counter.go's counterKey handles only ip, path and ip_path; anything
+// else returns an empty key, which skips the counter entirely. A typo such
+// as key: "client_ip" therefore validated cleanly and then never
+// incremented, so rules depending on it never fired.
+func TestValidate_CounterKeyMustBeSupported(t *testing.T) {
+	base := func(key string) *Config {
+		c := &Config{}
+		applyDefaults(c)
+		c.Pow.Modes.IPBound.Enabled = true
+		c.RiskControl.Enabled = true
+		c.RiskControl.Chains = map[string]ChainConfig{
+			"INPUT": {Policy: PolicyConfig{Target: "ACCEPT", Reason: "ok"}},
+		}
+		c.RiskControl.Counters = map[string]CounterConfig{
+			"per_ip": {Key: key, Window: time.Minute},
+		}
+		return c
+	}
+
+	for _, key := range []string{"ip", "path", "ip_path"} {
+		assert.NoError(t, Validate(base(key)), "key %q is supported at runtime", key)
+	}
+
+	err := Validate(base("client_ip"))
+	require.Error(t, err, "an unsupported key must not validate")
+	assert.Contains(t, err.Error(), `key "client_ip" is not supported`)
+
+	err = Validate(base(""))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "key must be set")
+}
