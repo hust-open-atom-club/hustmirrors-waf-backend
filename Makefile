@@ -13,7 +13,7 @@ LDFLAGS := -s -w \
 	-X github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/version.Commit=$(COMMIT) \
 	-X github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/version.BuildTime=$(BUILD_TIME)
 
-.PHONY: all build run test test-race vet lint fmt tidy migrate-up migrate-down clean help
+.PHONY: all build run test test-race test-postgres coverage vet lint fmt tidy migrate-up migrate-down clean help
 
 all: build
 
@@ -30,6 +30,16 @@ test:
 
 test-race:
 	@$(GO) test -race -count=1 ./...
+
+test-postgres:
+	@test -n "$(POSTGRES_TEST_DSN)" || (echo "POSTGRES_TEST_DSN is required, e.g. postgres://user:pass@127.0.0.1:5432/db?sslmode=disable" && exit 1)
+	@POSTGRES_TEST_DSN="$(POSTGRES_TEST_DSN)" $(GO) test -tags=integration -count=1 -v ./internal/storage/postgres
+
+coverage:
+	@packages=`$(GO) list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...`; \
+	if test -z "$$packages"; then echo "no test packages found"; exit 1; fi; \
+	$(GO) test -count=1 -coverpkg=./... -coverprofile=coverage.out $$packages
+	@$(GO) tool cover -func=coverage.out
 
 vet:
 	@$(GO) vet ./...
@@ -59,9 +69,10 @@ help:
 	@echo "  run          - Run backend from source"
 	@echo "  test         - Run unit tests"
 	@echo "  test-race    - Run unit tests with race detector"
-	@echo "  vet          - Run go vet"
-	@echo "  lint         - Run golangci-lint (fallback to go vet)"
-	@echo "  fmt          - Format Go sources"
+	@echo "  test-postgres - Run PostgreSQL integration tests (requires POSTGRES_TEST_DSN)"
+	@echo "  coverage      - Generate coverage.out and print coverage summary"
+	@echo "  lint          - Run golangci-lint (fallback to go vet)"
+	@echo "  fmt           - Format Go sources"
 	@echo "  tidy         - go mod tidy"
 	@echo "  migrate-up   - Apply DB migrations"
 	@echo "  migrate-down - Roll back last DB migration"

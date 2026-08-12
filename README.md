@@ -359,8 +359,14 @@ make migrate-up
 ```bash
 make test          # 单元测试
 make test-race     # race detector（需 CGO，Windows 上需装 gcc）
+make coverage      # 生成 coverage.out 并输出覆盖率汇总
+
+# PostgreSQL 真实集成测试（使用独立 schema，不会删除数据库中的其他表）
+POSTGRES_TEST_DSN='postgres://user:pass@127.0.0.1:5432/mirrors_pow?sslmode=disable' make test-postgres
 go test -tags=benchmark -bench=. ./internal/app/...  # 压测
 ```
+
+`make coverage` 会只选择包含测试文件的包作为测试入口，同时用 `-coverpkg=./...` 把全仓生产代码纳入统计，避免 Go 工具链在无测试包上尝试调用缺失的 `covdata`。PostgreSQL 集成测试默认不参与普通测试；未设置 `POSTGRES_TEST_DSN` 时会安全跳过，使用 `make test-postgres` 时则会明确要求配置该变量。
 
 基线（i7-14650HX，内存存储）：
 
