@@ -92,14 +92,15 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	var riskEngine *risk.Engine
 	var counterReg *risk.CounterRegistry
 	var pendingBlocker risk.PendingBlocker
+	pendingEnabled := cfg.RiskControl.Pending.Enabled == nil || *cfg.RiskControl.Pending.Enabled
+	needsPendingBlocker := (cfg.RiskControl.Enabled && pendingEnabled) || (cfg.Admin.Enabled && cfg.Admin.IPBlock.Enabled)
+	if needsPendingBlocker {
+		pendingBlocker = risk.NewIPPendingBlocker(
+			cfg.RiskControl.Pending.MaxPerIP,
+			cfg.RiskControl.Pending.BlockTTL,
+		)
+	}
 	if cfg.RiskControl.Enabled {
-		if pendingEnabled := cfg.RiskControl.Pending.Enabled == nil || *cfg.RiskControl.Pending.Enabled; pendingEnabled {
-			pendingBlocker = risk.NewIPPendingBlocker(
-				cfg.RiskControl.Pending.MaxPerIP,
-				cfg.RiskControl.Pending.BlockTTL,
-			)
-		}
-
 		riskEngine, err = risk.FromConfig(cfg.RiskControl)
 		if err != nil {
 			if pendingBlocker != nil {
@@ -156,6 +157,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 			RiskEngine: riskEngine,
 			Usage:      usageStore,
 			Pending:    pendingSnapshotSource(pendingBlocker),
+			IPBlocks:   ipBlockAdmin(pendingBlocker),
 			Metrics:    m,
 			Probes:     buildAdminProbes(cfg, usageStore, counterStore),
 		})
@@ -212,6 +214,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 func pendingSnapshotSource(blocker risk.PendingBlocker) admin.PendingSnapshotSource {
 	if source, ok := blocker.(admin.PendingSnapshotSource); ok {
 		return source
+	}
+	return nil
+}
+
+func ipBlockAdmin(blocker risk.PendingBlocker) admin.IPBlockAdmin {
+	if controller, ok := blocker.(admin.IPBlockAdmin); ok {
+		return controller
 	}
 	return nil
 }

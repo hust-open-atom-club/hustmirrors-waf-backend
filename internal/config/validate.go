@@ -270,6 +270,15 @@ func (e *ValidationError) checkAdmin(a AdminConfig) {
 	if a.Stats.QueryTimeout <= 0 {
 		e.add("admin.stats.query_timeout must be > 0")
 	}
+	if a.IPBlock.DefaultTTL <= 0 {
+		e.add("admin.ip_block.default_ttl must be > 0")
+	}
+	if a.IPBlock.MaxTTL <= 0 {
+		e.add("admin.ip_block.max_ttl must be > 0")
+	}
+	if a.IPBlock.DefaultTTL > a.IPBlock.MaxTTL {
+		e.add("admin.ip_block.default_ttl must be <= admin.ip_block.max_ttl")
+	}
 }
 
 func checkAdminURL(e *ValidationError, name, raw string) {

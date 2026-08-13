@@ -140,9 +140,11 @@ func (s *Service) ConfigGet(_ context.Context, _ ConfigGetRequest) (ConfigGetRes
 		},
 		"admin": map[string]interface{}{
 			"enabled": c.Admin.Enabled, "listen": c.Admin.Listen, "allow_cidrs": append([]string(nil), c.Admin.AllowCIDRs...),
-			"auth":      map[string]interface{}{"type": c.Admin.Auth.Type, "token_configured": c.Admin.Auth.Token != "" || c.Admin.Auth.TokenFile != "", "username_configured": c.Admin.Auth.Username != "", "password_configured": c.Admin.Auth.Password != ""},
-			"audit_log": boolValue(c.Admin.AuditLog),
-			"stats":     map[string]interface{}{"prometheus_configured": c.Admin.Stats.PrometheusURL != "", "loki_configured": c.Admin.Stats.LokiURL != "", "query_timeout": c.Admin.Stats.QueryTimeout.String()},
+			"auth":              map[string]interface{}{"type": c.Admin.Auth.Type, "token_configured": c.Admin.Auth.Token != "" || c.Admin.Auth.TokenFile != "", "username_configured": c.Admin.Auth.Username != "", "password_configured": c.Admin.Auth.Password != ""},
+			"audit_log":         boolValue(c.Admin.AuditLog),
+			"mutations_enabled": c.Admin.MutationsEnabled,
+			"ip_block":          map[string]interface{}{"enabled": c.Admin.IPBlock.Enabled, "default_ttl": c.Admin.IPBlock.DefaultTTL.String(), "max_ttl": c.Admin.IPBlock.MaxTTL.String()},
+			"stats":             map[string]interface{}{"prometheus_configured": c.Admin.Stats.PrometheusURL != "", "loki_configured": c.Admin.Stats.LokiURL != "", "query_timeout": c.Admin.Stats.QueryTimeout.String()},
 		},
 		"logging": map[string]interface{}{"level": c.Logging.Level, "format": c.Logging.Format, "log_access": boolValue(c.Logging.LogAccess), "log_denied": boolValue(c.Logging.LogDenied), "hash_ip": c.Logging.HashIP, "log_salt": "[redacted]"},
 		"cleanup": map[string]interface{}{"enabled": boolValue(c.Cleanup.Enabled), "interval": c.Cleanup.Interval.String(), "expired_grace_period": c.Cleanup.ExpiredGracePeriod.String()},
@@ -199,18 +201,44 @@ func (s *Service) TokenGet(ctx context.Context, req TokenGetRequest) (TokenGetRe
 }
 
 func (s *Service) PendingList(_ context.Context, _ PendingListRequest) (PendingListResponse, error) {
-	result := PendingListResponse{Scope: "instance", Entries: []PendingEntryDTO{}}
+	result := PendingListResponse{
+		Scope:            "instance",
+		MutationsEnabled: s.ipBlockMutationsEnabled(),
+		Entries:          []PendingEntryDTO{},
+	}
 	if s.pending == nil {
 		return result, nil
 	}
 	for _, item := range s.pending.Snapshot() {
-		entry := PendingEntryDTO{IP: redactIP(item.IP), Pending: item.Pending, Blocked: item.Blocked}
-		if !item.BlockedUntil.IsZero() {
-			entry.BlockedUntil = item.BlockedUntil.Unix()
-		}
-		result.Entries = append(result.Entries, entry)
+		result.Entries = append(result.Entries, pendingEntryDTO(item))
 	}
 	return result, nil
+}
+
+func (s *Service) ipBlockMutationsEnabled() bool {
+	return s.cfg != nil && s.cfg.Admin.MutationsEnabled && s.cfg.Admin.IPBlock.Enabled &&
+		(s.cfg.Admin.Auth.Type == "token" || s.cfg.Admin.Auth.Type == "basic") && s.ipBlocks != nil
+}
+
+func pendingEntryDTO(item risk.PendingSnapshot) PendingEntryDTO {
+	entry := PendingEntryDTO{
+		IP:      redactIP(item.IP),
+		Pending: item.Pending,
+		Blocked: item.Blocked,
+		Source:  item.Source,
+		Reason:  item.Reason,
+		Actor:   item.Actor,
+	}
+	if !item.BlockedUntil.IsZero() {
+		entry.BlockedUntil = item.BlockedUntil.Unix()
+	}
+	if !item.CreatedAt.IsZero() {
+		entry.CreatedAt = item.CreatedAt.Unix()
+	}
+	if !item.UpdatedAt.IsZero() {
+		entry.UpdatedAt = item.UpdatedAt.Unix()
+	}
+	return entry
 }
 
 func (s *Service) AuditList(ctx context.Context, req AuditListRequest) (AuditListResponse, error) {
@@ -299,6 +327,15 @@ func matchView(match config.MatchConfig) map[string]interface{} {
 }
 
 func redactIP(ip string) string {
+	return FingerprintIP(ip)
+}
+
+// FingerprintIP returns the non-reversible short identifier used in Admin API
+// responses and audit events. It never returns the raw input.
+func FingerprintIP(ip string) string {
+	if canonical, err := risk.CanonicalIP(ip); err == nil {
+		ip = canonical
+	}
 	if ip == "" {
 		return ""
 	}
@@ -308,3 +345,4 @@ func redactIP(ip string) string {
 
 var _ UsageReader = (storage.UsageStore)(nil)
 var _ PendingSnapshotSource = (*risk.IPPendingBlocker)(nil)
+var _ IPBlockAdmin = (*risk.IPPendingBlocker)(nil)

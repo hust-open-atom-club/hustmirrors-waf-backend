@@ -271,7 +271,7 @@ print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 | `server.listen` | `127.0.0.1:8080` | 监听地址（不要暴露公网） |
 | `pow.enabled` | `true` | PoW 验证总开关。`false` 时不解析也不校验 token，交由风控链决定 |
 | `pow.dry_run` | `false` | dry-run：记录但放行 |
-| `pow.bypass_all` | `false` | 紧急放行开关，无条件 200 |
+| `pow.bypass_all` | `false` | 紧急绕过 PoW/普通风控；不会绕过 Admin 人工 IP Block |
 | `pow.algorithm` | `sha256` | 仅实现 `sha256`，填其他值启动即报错 |
 | `pow.modes.ip_bound` | enabled, d=22, ttl=24h | 绑定 IP 长效模式，不计量 |
 | `pow.modes.generic` | enabled, d=22, ttl=30m, max_uses=5 | 通用短效模式，按 `max_uses` 计量 |
@@ -286,12 +286,16 @@ print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 | `logging.log_denied` | `true` | 是否记录拒绝结果的日志 |
 | `admin.enabled` | `false` | 管理 API |
 | `admin.audit_log` | `true` | 是否记录管理操作审计 |
+| `admin.mutations_enabled` | `false` | Admin 写操作总开关；`auth.type=none` 始终只读 |
+| `admin.ip_block.enabled` | `false` | 启用实例级人工 IP Block/Unblock |
+| `admin.ip_block.default_ttl` | `1h` | 未指定 TTL 时的人工 Block 时长 |
+| `admin.ip_block.max_ttl` | `24h` | 人工 Block 最大时长，不支持永久 Block |
 
 以上默认值为 `true` 的布尔开关都是「省略即开启」——配置里不写不会把它们关掉。
 
 > **`pow.enabled` 与 `bypass_all` 不同**：前者只跳过 PoW 校验，风控规则照常生效
-> （一条 `REJECT` 规则仍会拒绝）；后者无条件放行一切。想临时停用 PoW 用前者，
-> 想紧急全放通用后者。
+> （一条 `REJECT` 规则仍会拒绝）；后者绕过 PoW 和普通风控。Admin 人工 IP Block
+> 是独立的紧急安全控制，优先级高于 `bypass_all`，不会被它放行。
 
 > `admin.enabled=true` 时必须显式写 `admin.auth.type`。留空会被配置校验拒绝，
 > 避免管理接口在无认证状态下启动。`type: none` 仅在监听 loopback

@@ -116,11 +116,23 @@ export interface PendingEntry {
   pending: number
   blocked: boolean
   blocked_until?: number
+  source?: 'automatic' | 'manual' | 'automatic+manual' | string
+  reason?: string
+  actor?: string
+  created_at?: number
+  updated_at?: number
 }
 
 export interface PendingList {
   scope: string
+  mutations_enabled: boolean
   entries: PendingEntry[]
+}
+
+export interface RiskBlockMutation {
+  scope: string
+  changed: boolean
+  entry: PendingEntry
 }
 
 export interface AuditEvent {
@@ -129,6 +141,11 @@ export interface AuditEvent {
   actor: string
   request_id?: string
   ip?: string
+  target?: string
+  source?: string
+  reason?: string
+  code?: string
+  ttl_seconds?: number
   ok: boolean
   detail?: string
 }

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import {
   Activity,
   AlertTriangle,
+  Ban,
   BarChart3,
   Check,
   ChevronRight,
@@ -37,6 +38,7 @@ import type {
   PendingList,
   RuleList,
   RulePreview,
+  RiskBlockMutation,
   SystemHealth,
   SystemInfo,
   TokenGet,
@@ -104,7 +106,7 @@ function App() {
     setError('')
     try {
       if (page === 'rules') setRules(await rpc<RuleList>('rule.list', {}, auth, signal))
-      if (page === 'pending') setPending(await rpc<PendingList>('pending.list', {}, auth, signal))
+      if (page === 'pending') setPending(await rpc<PendingList>('risk.blocks.list', {}, auth, signal))
       if (page === 'audit') setAudit(await rpc<AuditList>('audit.list', { limit: 100 }, auth, signal))
       if (page === 'config') setConfig(await rpc<ConfigGet>('config.get', {}, auth, signal))
       setAuthRequired(false)
@@ -244,7 +246,7 @@ function App() {
             {page === 'overview' && <OverviewPage summary={summary} series={series} health={health} onNavigate={navigate} />}
             {page === 'rules' && <RulesPage rules={rules} auth={auth} onError={handleLoadError} />}
             {page === 'tokens' && <TokensPage auth={auth} onError={handleLoadError} />}
-            {page === 'pending' && <PendingPage pending={pending} />}
+            {page === 'pending' && <PendingPage pending={pending} auth={auth} onError={handleLoadError} onChanged={async (message) => { await loadPageData(); setToast(message) }} />}
             {page === 'audit' && <AuditPage audit={audit} />}
             {page === 'config' && <ConfigPage config={config} auth={auth} onError={handleLoadError} />}
           </>}
@@ -266,7 +268,7 @@ function pageDescription(page: Page) {
     overview: '实时查看 PoW、风控决策和运行时依赖的健康状态。',
     rules: '以只读方式检查当前风险链，并对请求上下文进行安全预览。',
     tokens: '按 sign ID 查询使用记录；敏感字段已在服务端剥离。',
-    pending: '查看当前后端实例的受保护请求并发和临时阻断状态。',
+    pending: '查看当前实例的 Pending 状态，并执行受审计的人工 IP Block/Unblock。',
     audit: '从结构化审计流中检索后台操作轨迹。',
     config: '查看已生效配置的脱敏视图，并在应用前验证候选 YAML。',
   }[page]
@@ -304,7 +306,7 @@ function OverviewPage({ summary, series, health, onNavigate }: { summary: Dashbo
         <div className="insight-list">
           <Insight icon={Gauge} title="风险决策总量" value={formatNumber(metrics?.risk_decision_total ?? 0)} detail="由风险引擎累计产生的决策" />
           <Insight icon={Network} title="Pending 范围" value="INSTANCE" detail="当前状态只覆盖本后端进程" />
-          <Insight icon={ServerCog} title="控制面" value="READ ONLY" detail="Phase 1 不提供在线写入或 reload" />
+          <Insight icon={ServerCog} title="控制面" value="PHASE 2" detail="支持受控的实例级 IP Block/Unblock" />
         </div>
       </div>
       <div className="panel quick-panel">
@@ -379,14 +381,74 @@ function TokensPage({ auth, onError }: { auth: AuthState; onError: (reason: unkn
 
 function RecordValue({ label, value, mono }: { label: string; value: string; mono?: boolean }) { return <div className="record-value"><span>{label}</span><strong className={mono ? 'mono' : ''}>{value}</strong></div> }
 
-function PendingPage({ pending }: { pending: PendingList | null }) { const entries = pending?.entries ?? []; return <section className="single-layout"><div className="panel"><PanelHeader title="实例 Pending 状态" kicker={`SCOPE: ${pending?.scope?.toUpperCase() ?? 'INSTANCE'}`} action={<span className="source-badge muted"><TimerReset size={13} /> READ ONLY</span>} />{entries.length === 0 ? <EmptyState icon={TimerReset} title="当前没有活跃 Pending" description="没有 IP 达到并发等待或临时阻断状态。" /> : <div className="data-table-wrap"><table><thead><tr><th>IP 指纹</th><th>Pending</th><th>状态</th><th>阻断截止</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.ip}><td className="mono">{entry.ip}</td><td>{entry.pending}</td><td><span className={`table-status ${entry.blocked ? 'danger' : 'good'}`}><span /> {entry.blocked ? 'BLOCKED' : 'ACTIVE'}</span></td><td>{formatDate(entry.blocked_until)}</td></tr>)}</tbody></table></div>}</div></section> }
+function PendingPage({ pending, auth, onError, onChanged }: { pending: PendingList | null; auth: AuthState; onError: (reason: unknown) => void; onChanged: (message: string) => Promise<void> }) {
+  const entries = pending?.entries ?? []
+  const [dialog, setDialog] = useState<{ mode: 'add' | 'unblock'; fingerprint?: string } | null>(null)
+  const [form, setForm] = useState({ ip: '', confirm_ip: '', ttl_seconds: '3600', reason: '' })
+  const [submitting, setSubmitting] = useState(false)
+  const [operationError, setOperationError] = useState('')
 
-function AuditPage({ audit }: { audit: AuditList | null }) { const events = audit?.events ?? []; return <section className="single-layout"><div className="panel"><PanelHeader title="审计事件" kicker="ADMIN_AUDIT · LOKI" action={<span className={`source-badge ${audit?.available ? 'good' : 'muted'}`}><Activity size={13} /> {audit?.available ? 'LIVE' : 'UNAVAILABLE'}</span>} />{events.length === 0 ? <EmptyState icon={FileSearch} title="没有可展示的审计事件" description={audit?.error ?? '配置 Loki 后启用固定 LogQL 查询。'} /> : <div className="data-table-wrap"><table><thead><tr><th>时间</th><th>动作</th><th>操作者</th><th>结果</th><th>请求 ID</th><th>详情</th></tr></thead><tbody>{events.map((event, index) => <tr key={`${event.timestamp}-${event.action}-${index}`}><td className="mono">{formatDate(event.timestamp)}</td><td><strong>{event.action}</strong></td><td>{event.actor}</td><td><span className={`table-status ${event.ok ? 'good' : 'danger'}`}><span /> {event.ok ? 'OK' : 'ERROR'}</span></td><td className="mono">{event.request_id || '—'}</td><td>{event.detail || '—'}</td></tr>)}</tbody></table></div>}</div></section> }
+  const openDialog = (mode: 'add' | 'unblock', fingerprint?: string) => {
+    setForm({ ip: '', confirm_ip: '', ttl_seconds: '3600', reason: '' })
+    setOperationError('')
+    setDialog({ mode, fingerprint })
+  }
+
+  const submit = async () => {
+    if (!dialog) return
+    setSubmitting(true)
+    setOperationError('')
+    try {
+      const response = dialog.mode === 'add'
+        ? await rpc<RiskBlockMutation>('risk.blocks.add', {
+          ip: form.ip,
+          confirm_ip: form.confirm_ip,
+          ttl_seconds: Number(form.ttl_seconds),
+          reason: form.reason,
+        }, auth)
+        : await rpc<RiskBlockMutation>('risk.blocks.unblock', {
+          ip: form.ip,
+          confirm_ip: form.confirm_ip,
+        }, auth)
+      const stillAutomatic = dialog.mode === 'unblock' && response.entry.blocked && response.entry.source === 'automatic'
+      setDialog(null)
+      await onChanged(stillAutomatic
+        ? '人工阻断已解除，但自动 Pending 阻断仍在生效'
+        : dialog.mode === 'add' ? '人工 IP Block 已应用' : '人工 IP Block 已解除')
+    } catch (reason) {
+      setOperationError(reason instanceof Error ? reason.message : '操作失败')
+      if (reason instanceof AuthRequiredError) onError(reason)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const mutationEnabled = pending?.mutations_enabled ?? false
+  return <section className="single-layout">
+    <div className="panel operation-note">
+      <div><Ban size={18} /><span><strong>实例级紧急阻断</strong><small>人工 Block 高于 bypass_all；状态不跨副本，重启后丢失。</small></span></div>
+      <button className="danger-button" onClick={() => openDialog('add')} disabled={!mutationEnabled} title={mutationEnabled ? '添加人工 IP Block' : '需要显式开启 Admin mutation 与 IP block'}><Ban size={16} /> 添加 Block</button>
+    </div>
+    <div className="panel">
+      <PanelHeader title="Pending / Block 状态" kicker={`SCOPE: ${pending?.scope?.toUpperCase() ?? 'INSTANCE'}`} action={<span className={`source-badge ${mutationEnabled ? 'good' : 'muted'}`}><TimerReset size={13} /> {mutationEnabled ? 'MUTATIONS ON' : 'MUTATIONS OFF'}</span>} />
+      {entries.length === 0 ? <EmptyState icon={TimerReset} title="当前没有活跃 Pending 或 Block" description={mutationEnabled ? '可通过上方操作添加实例级人工 IP Block。' : '管理写操作默认关闭；启用后可添加人工 IP Block。'} /> : <div className="data-table-wrap"><table className="block-table"><thead><tr><th>IP 指纹</th><th>Pending</th><th>来源 / 原因</th><th>状态</th><th>阻断截止</th><th>操作者</th><th>操作</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.ip}><td className="mono">{entry.ip}</td><td>{entry.pending}</td><td><strong>{entry.source || 'pending'}</strong><small className="table-subtext">{entry.reason || '—'}</small></td><td><span className={`table-status ${entry.blocked ? 'danger' : 'good'}`}><span /> {entry.blocked ? 'BLOCKED' : 'ACTIVE'}</span></td><td>{formatDate(entry.blocked_until)}</td><td>{entry.actor || '—'}</td><td><button className="table-action" disabled={!mutationEnabled || !entry.source?.includes('manual')} onClick={() => openDialog('unblock', entry.ip)}>解除人工 Block</button></td></tr>)}</tbody></table></div>}
+    </div>
+    {dialog && <BlockMutationModal mode={dialog.mode} expectedFingerprint={dialog.fingerprint} form={form} setForm={setForm} submitting={submitting} error={operationError} onSubmit={() => void submit()} onClose={() => setDialog(null)} />}
+  </section>
+}
+
+function BlockMutationModal({ mode, expectedFingerprint, form, setForm, submitting, error, onSubmit, onClose }: { mode: 'add' | 'unblock'; expectedFingerprint?: string; form: { ip: string; confirm_ip: string; ttl_seconds: string; reason: string }; setForm: (value: { ip: string; confirm_ip: string; ttl_seconds: string; reason: string }) => void; submitting: boolean; error: string; onSubmit: () => void; onClose: () => void }) {
+  const isAdd = mode === 'add'
+  const ready = form.ip.trim() !== '' && form.confirm_ip.trim() !== '' && form.ip.trim() === form.confirm_ip.trim() && (!isAdd || (form.reason.trim() !== '' && Number(form.ttl_seconds) > 0))
+  return <div className="modal-scrim"><section className="auth-modal block-modal" role="dialog" aria-modal="true" aria-labelledby="block-title"><button className="modal-close icon-button" aria-label="关闭" onClick={onClose}><X size={18} /></button><div className="auth-icon danger-icon"><Ban size={22} /></div><span className="eyebrow">ADMIN MUTATION / INSTANCE</span><h2 id="block-title">{isAdd ? '添加人工 IP Block' : '解除人工 IP Block'}</h2><p>{isAdd ? '该操作优先于 bypass_all，并只作用于当前后端实例。' : '只清除人工 Block；仍有效的自动 Pending Block 不会被解除。'}</p>{expectedFingerprint && <div className="fingerprint-callout"><span>目标指纹</span><code>{expectedFingerprint}</code></div>}<div className="form-two block-form"><Field label="目标 IP"><input value={form.ip} autoFocus placeholder="192.0.2.1" onChange={(event) => setForm({ ...form, ip: event.target.value })} /></Field><Field label="再次输入 IP 确认"><input value={form.confirm_ip} placeholder="必须与目标 IP 完全一致" onChange={(event) => setForm({ ...form, confirm_ip: event.target.value })} /></Field></div>{isAdd && <><div className="form-two"><Field label="TTL（秒）"><input type="number" min="1" value={form.ttl_seconds} onChange={(event) => setForm({ ...form, ttl_seconds: event.target.value })} /></Field><Field label="原因"><input value={form.reason} maxLength={256} placeholder="必填，不得包含换行" onChange={(event) => setForm({ ...form, reason: event.target.value })} /></Field></div></>}{form.ip && form.confirm_ip && form.ip !== form.confirm_ip && <div className="inline-error" role="alert">两次输入的 IP 不一致。</div>}{error && <div className="inline-error" role="alert">{error}</div>}<div className="modal-actions"><button className="secondary-button" onClick={onClose} disabled={submitting}>取消</button><button className="danger-button" onClick={onSubmit} disabled={!ready || submitting}>{submitting ? <RefreshCw size={16} className="spin" /> : <Ban size={16} />} {isAdd ? '确认 Block' : '确认解除'}</button></div></section></div>
+}
+
+function AuditPage({ audit }: { audit: AuditList | null }) { const events = audit?.events ?? []; return <section className="single-layout"><div className="panel"><PanelHeader title="审计事件" kicker="ADMIN_AUDIT · LOKI" action={<span className={`source-badge ${audit?.available ? 'good' : 'muted'}`}><Activity size={13} /> {audit?.available ? 'LIVE' : 'UNAVAILABLE'}</span>} />{events.length === 0 ? <EmptyState icon={FileSearch} title="没有可展示的审计事件" description={audit?.error ?? '配置 Loki 后启用固定 LogQL 查询。'} /> : <div className="data-table-wrap"><table><thead><tr><th>时间</th><th>动作</th><th>操作者</th><th>目标 / 原因</th><th>结果</th><th>请求 ID</th><th>详情</th></tr></thead><tbody>{events.map((event, index) => <tr key={`${event.timestamp}-${event.action}-${index}`}><td className="mono">{formatDate(event.timestamp)}</td><td><strong>{event.action}</strong></td><td>{event.actor}</td><td><span className="mono">{event.target || '—'}</span><small className="table-subtext">{event.reason || event.source || '—'}</small></td><td><span className={`table-status ${event.ok ? 'good' : 'danger'}`}><span /> {event.ok ? 'OK' : event.code || 'ERROR'}</span></td><td className="mono">{event.request_id || '—'}</td><td>{event.detail || '—'}</td></tr>)}</tbody></table></div>}</div></section> }
 
 function ConfigPage({ config, auth, onError }: { config: ConfigGet | null; auth: AuthState; onError: (reason: unknown) => void }) { const [yaml, setYaml] = useState(''); const [validation, setValidation] = useState<ConfigValidate | null>(null); const validate = async () => { try { setValidation(await rpc<ConfigValidate>('config.validate', { config_yaml: yaml }, auth)) } catch (reason) { onError(reason) } }; return <section className="split-layout config-layout"><div className="panel"><PanelHeader title="当前配置" kicker="EFFECTIVE · SANITIZED" /><pre className="config-view">{config ? stringify(config.config) : '暂无配置数据'}</pre></div><div className="panel"><PanelHeader title="候选校验" kicker="VALIDATE BEFORE APPLY" /><textarea className="yaml-editor" value={yaml} onChange={(event) => setYaml(event.target.value)} placeholder="粘贴候选 YAML，服务端只校验不写入…" /><button className="primary-button" onClick={() => void validate()} disabled={!yaml.trim()}><FileCode2 size={16} /> 校验候选配置</button>{validation && <div className={`validation-box ${validation.ok ? 'ok' : 'bad'}`}><strong>{validation.ok ? '配置通过校验' : '发现配置问题'}</strong>{validation.error && <p>{validation.error}</p>}{validation.problems?.map((problem) => <p key={problem}>· {problem}</p>)}</div>}</div></section> }
 
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}</label> }
 function EmptyState({ icon: Icon, title, description }: { icon: typeof Activity; title: string; description: string }) { return <div className="empty-state"><div className="empty-icon"><Icon size={22} /></div><strong>{title}</strong><p>{description}</p></div> }
-function AuthModal({ authForm, setAuthForm, onSubmit, onClose }: { authForm: { mode: 'token' | 'basic'; token: string; username: string; password: string }; setAuthForm: (value: { mode: 'token' | 'basic'; token: string; username: string; password: string }) => void; onSubmit: () => void; onClose: () => void }) { return <div className="modal-scrim"><section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button className="modal-close icon-button" aria-label="关闭" onClick={onClose}><X size={18} /></button><div className="auth-icon"><LockKeyhole size={22} /></div><span className="eyebrow">ADMIN API / AUTH</span><h2 id="auth-title">连接运维控制面</h2><p>凭据只保存在当前页面内存，不会写入浏览器存储。</p><div className="auth-tabs"><button className={authForm.mode === 'token' ? 'active' : ''} onClick={() => setAuthForm({ ...authForm, mode: 'token' })}>Bearer Token</button><button className={authForm.mode === 'basic' ? 'active' : ''} onClick={() => setAuthForm({ ...authForm, mode: 'basic' })}>Basic Auth</button></div>{authForm.mode === 'token' ? <Field label="ADMIN TOKEN"><input type="password" value={authForm.token} autoFocus onChange={(event) => setAuthForm({ ...authForm, token: event.target.value })} /></Field> : <><Field label="USERNAME"><input value={authForm.username} onChange={(event) => setAuthForm({ ...authForm, username: event.target.value })} /></Field><Field label="PASSWORD"><input type="password" value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} /></Field></>}<button className="primary-button full-button" onClick={onSubmit}><LockKeyhole size={16} /> 验证并连接</button></section></div> }
+function AuthModal({ authForm, setAuthForm, onSubmit, onClose }: { authForm: { mode: 'token' | 'basic'; token: string; username: string; password: string }; setAuthForm: (value: { mode: 'token' | 'basic'; token: string; username: string; password: string }) => void; onSubmit: () => void; onClose: () => void }) { return <div className="modal-scrim"><section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button type="button" className="modal-close icon-button" aria-label="关闭" onClick={onClose}><X size={18} /></button><div className="auth-icon"><LockKeyhole size={22} /></div><span className="eyebrow">ADMIN API / AUTH</span><h2 id="auth-title">连接运维控制面</h2><p>凭据只保存在当前页面内存，不会写入浏览器存储。</p><div className="auth-tabs"><button type="button" className={authForm.mode === 'token' ? 'active' : ''} onClick={() => setAuthForm({ ...authForm, mode: 'token' })}>Bearer Token</button><button type="button" className={authForm.mode === 'basic' ? 'active' : ''} onClick={() => setAuthForm({ ...authForm, mode: 'basic' })}>Basic Auth</button></div><form onSubmit={(event) => { event.preventDefault(); onSubmit() }}>{authForm.mode === 'token' ? <><input className="visually-hidden" name="username" autoComplete="username" value="admin-token" readOnly tabIndex={-1} aria-hidden="true" /><Field label="ADMIN TOKEN"><input name="password" type="password" autoComplete="current-password" value={authForm.token} autoFocus onChange={(event) => setAuthForm({ ...authForm, token: event.target.value })} /></Field></> : <><Field label="USERNAME"><input autoComplete="username" value={authForm.username} onChange={(event) => setAuthForm({ ...authForm, username: event.target.value })} /></Field><Field label="PASSWORD"><input type="password" autoComplete="current-password" value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} /></Field></>}<button type="submit" className="primary-button full-button"><LockKeyhole size={16} /> 验证并连接</button></form></section></div> }
 
 export default App

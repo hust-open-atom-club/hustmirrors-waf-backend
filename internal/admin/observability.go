@@ -354,13 +354,18 @@ func parseAuditLine(timestampNS, line string) (AuditEventDTO, bool) {
 		return AuditEventDTO{}, false
 	}
 	return AuditEventDTO{
-		Timestamp: ns / int64(time.Second),
-		Action:    stringValue(raw["action"]),
-		Actor:     stringValue(raw["actor"]),
-		RequestID: stringValue(raw["request_id"]),
-		IP:        stringValue(raw["ip"]),
-		OK:        jsonBoolValue(raw["ok"]),
-		Detail:    stringValue(raw["detail"]),
+		Timestamp:  ns / int64(time.Second),
+		Action:     stringValue(raw["action"]),
+		Actor:      stringValue(raw["actor"]),
+		RequestID:  stringValue(raw["request_id"]),
+		IP:         stringValue(raw["ip"]),
+		Target:     stringValue(raw["target_ip_hash"]),
+		Source:     stringValue(raw["source"]),
+		Reason:     stringValue(raw["reason"]),
+		Code:       stringValue(raw["code"]),
+		TTLSeconds: jsonInt64Value(raw["ttl_seconds"]),
+		OK:         jsonBoolValue(raw["ok"]),
+		Detail:     stringValue(raw["detail"]),
 	}, true
 }
 
@@ -372,4 +377,15 @@ func stringValue(v interface{}) string {
 func jsonBoolValue(v interface{}) bool {
 	b, _ := v.(bool)
 	return b
+}
+
+func jsonInt64Value(v interface{}) int64 {
+	switch value := v.(type) {
+	case float64:
+		return int64(value)
+	case string:
+		parsed, _ := strconv.ParseInt(value, 10, 64)
+		return parsed
+	}
+	return 0
 }

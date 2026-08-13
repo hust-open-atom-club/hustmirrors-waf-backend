@@ -126,7 +126,7 @@ func TestService_AuditListUsesConfiguredLogQL(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotQuery = r.URL.Query().Get("query")
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"success","data":{"result":[{"values":[["1000000000","{\"event\":\"admin_audit\",\"action\":\"config.get\",\"actor\":\"ops\",\"ok\":true}"]]}]}}`))
+		_, _ = w.Write([]byte(`{"status":"success","data":{"result":[{"values":[["1000000000","{\"event\":\"admin_audit\",\"action\":\"risk.blocks.add\",\"actor\":\"ops\",\"target_ip_hash\":\"abc123\",\"source\":\"manual\",\"reason\":\"abuse\",\"ttl_seconds\":3600,\"ok\":true}"]]}]}}`))
 	}))
 	defer server.Close()
 
@@ -142,7 +142,11 @@ func TestService_AuditListUsesConfiguredLogQL(t *testing.T) {
 	assert.True(t, result.Available)
 	assert.Equal(t, fixedQuery, gotQuery)
 	require.Len(t, result.Events, 1)
-	assert.Equal(t, "config.get", result.Events[0].Action)
+	assert.Equal(t, "risk.blocks.add", result.Events[0].Action)
+	assert.Equal(t, "abc123", result.Events[0].Target)
+	assert.Equal(t, "manual", result.Events[0].Source)
+	assert.Equal(t, "abuse", result.Events[0].Reason)
+	assert.Equal(t, int64(3600), result.Events[0].TTLSeconds)
 }
 
 func TestService_SystemHealthReportsProbeFailure(t *testing.T) {

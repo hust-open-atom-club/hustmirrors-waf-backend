@@ -9,12 +9,14 @@ export class AuthRequiredError extends Error {
 
 export class RPCError extends Error {
   readonly status: number
+  readonly code?: string
   readonly requestID?: string
 
-  constructor(message: string, status: number, requestID?: string) {
+  constructor(message: string, status: number, code?: string, requestID?: string) {
     super(message)
     this.name = 'RPCError'
     this.status = status
+    this.code = code
     this.requestID = requestID
   }
 }
@@ -65,12 +67,13 @@ export async function rpc<TResponse, TRequest extends object = Record<string, un
       : 'error' in payload && payload.error
         ? payload.error
         : `请求失败（HTTP ${response.status}）`
-    throw new RPCError(message, response.status, 'request_id' in payload ? payload.request_id : undefined)
+    const code = 'code' in payload ? payload.code : undefined
+    throw new RPCError(message, response.status, code, 'request_id' in payload ? payload.request_id : undefined)
   }
 
   const envelope = payload as StandardResponse<TResponse>
   if (!envelope.ok || envelope.data === undefined) {
-    throw new RPCError(envelope.message || '后台未返回数据', response.status, envelope.request_id)
+    throw new RPCError(envelope.message || '后台未返回数据', response.status, envelope.code, envelope.request_id)
   }
   return envelope.data
 }

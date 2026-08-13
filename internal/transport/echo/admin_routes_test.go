@@ -11,7 +11,7 @@ import (
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/logging"
 )
 
-func TestAdminRoutesExposeReadOnlyControlPlane(t *testing.T) {
+func TestAdminRoutesExposePhase2ControlPlane(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Admin.Auth.Type = "none"
 	svc, err := admin.New(admin.Options{Config: cfg})
@@ -32,9 +32,12 @@ func TestAdminRoutesExposeReadOnlyControlPlane(t *testing.T) {
 		"/admin/api/rule.preview",
 		"/admin/api/token.get",
 		"/admin/api/pending.list",
+		"/admin/api/risk.blocks.list",
+		"/admin/api/risk.blocks.add",
+		"/admin/api/risk.blocks.unblock",
 		"/admin/api/audit.list",
 	} {
 		assert.True(t, paths[path], path)
 	}
-	assert.False(t, paths["/admin/api/rule.reload"], "phase 1 must not expose mutating reload")
+	assert.False(t, paths["/admin/api/rule.reload"], "phase 2 must not expose config/rule reload")
 }

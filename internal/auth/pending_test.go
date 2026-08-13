@@ -147,6 +147,24 @@ func TestVerify_PendingBlockerDoesNotAffectBypassAll(t *testing.T) {
 	assert.Equal(t, ReasonBypassAll, res.Reason)
 }
 
+func TestVerify_ManualBlockOverridesBypassAndProtection(t *testing.T) {
+	cfg := makeBaseConfig()
+	cfg.Pow.BypassAll = true
+	cfg.RiskControl.Enabled = false
+	blocker := risk.NewIPPendingBlocker(1, time.Hour)
+	defer blocker.Close()
+	_, err := blocker.Block("192.0.2.99", risk.BlockInput{TTL: time.Hour, Reason: "incident", Actor: "ops"})
+	require.NoError(t, err)
+	svc, _, _, _ := makeTestServiceWithPendingBlocker(t, cfg, nil, blocker)
+
+	res := svc.Verify(context.Background(), AuthRequest{
+		OriginalURI: "/index.html", OriginalMethod: "GET", RealIP: "192.0.2.99",
+	})
+	assert.False(t, res.Allowed)
+	assert.Equal(t, ReasonIPManuallyBlocked, res.Reason)
+	assert.Equal(t, 429, res.HTTPStatus)
+}
+
 func makeTestServiceWithPendingBlocker(t *testing.T, cfg *config.Config, engine *risk.Engine, blocker risk.PendingBlocker) (*Service, *clock.Fake, *memory.UsageStore, func(payload pow.TokenPayload) (token, sign string)) {
 	t.Helper()
 	return makeTestServiceWithEngineAndPending(t, cfg, engine, blocker)

@@ -34,6 +34,15 @@ func TestValidate_AdminStatsRequiresFixedLokiQuery(t *testing.T) {
 	assert.Contains(t, err.Error(), "loki_query must be set")
 }
 
+func TestValidate_AdminIPBlockTTLRange(t *testing.T) {
+	cfg := validAdminStatsConfig()
+	cfg.Admin.IPBlock.DefaultTTL = 2 * time.Hour
+	cfg.Admin.IPBlock.MaxTTL = time.Hour
+	err := Validate(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "default_ttl must be <=")
+}
+
 func TestValidate_AdminStatsRejectsNonPositiveTimeout(t *testing.T) {
 	cfg := validAdminStatsConfig()
 	cfg.Admin.Stats.QueryTimeout = -time.Second

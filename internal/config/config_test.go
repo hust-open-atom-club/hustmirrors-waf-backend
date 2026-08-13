@@ -30,6 +30,10 @@ func TestApplyDefaults_FillsRequired(t *testing.T) {
 	assert.Equal(t, time.Hour, c.RiskControl.Pending.BlockTTL)
 	assert.Equal(t, "info", c.Logging.Level)
 	assert.Equal(t, "127.0.0.1:8081", c.Admin.Listen)
+	assert.False(t, c.Admin.MutationsEnabled)
+	assert.False(t, c.Admin.IPBlock.Enabled)
+	assert.Equal(t, time.Hour, c.Admin.IPBlock.DefaultTTL)
+	assert.Equal(t, 24*time.Hour, c.Admin.IPBlock.MaxTTL)
 	assert.Equal(t, 10*time.Minute, c.Cleanup.Interval)
 }
 

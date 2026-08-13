@@ -25,6 +25,7 @@ func (s *Server) registerMainRoutes() {
 
 func (s *Server) registerAdminRoutes() {
 	api := s.echo.Group("/admin/api",
+		s.adminAuditMiddleware,
 		adminAuthMiddleware(s.cfg.Admin),
 		adminCIDRMiddleware(s.cfg.Admin),
 	)
@@ -39,6 +40,9 @@ func (s *Server) registerAdminRoutes() {
 	api.POST("/rule.list", s.adminRuleList)
 	api.POST("/token.get", s.adminTokenGet)
 	api.POST("/pending.list", s.adminPendingList)
+	api.POST("/risk.blocks.list", s.adminRiskBlocksList)
+	api.POST("/risk.blocks.add", s.adminRiskBlocksAdd)
+	api.POST("/risk.blocks.unblock", s.adminRiskBlocksUnblock)
 	api.POST("/audit.list", s.adminAuditList)
 
 	// The SPA shell is protected by the network allow-list only. API calls

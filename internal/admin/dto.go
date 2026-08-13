@@ -183,8 +183,9 @@ type TokenRecordDTO struct {
 type PendingListRequest struct{}
 
 type PendingListResponse struct {
-	Scope   string            `json:"scope"`
-	Entries []PendingEntryDTO `json:"entries"`
+	Scope            string            `json:"scope"`
+	MutationsEnabled bool              `json:"mutations_enabled"`
+	Entries          []PendingEntryDTO `json:"entries"`
 }
 
 type PendingEntryDTO struct {
@@ -192,6 +193,35 @@ type PendingEntryDTO struct {
 	Pending      int    `json:"pending"`
 	Blocked      bool   `json:"blocked"`
 	BlockedUntil int64  `json:"blocked_until,omitempty"`
+	Source       string `json:"source,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+	Actor        string `json:"actor,omitempty"`
+	CreatedAt    int64  `json:"created_at,omitempty"`
+	UpdatedAt    int64  `json:"updated_at,omitempty"`
+}
+
+type RiskBlocksListRequest struct{}
+
+type RiskBlocksListResponse = PendingListResponse
+
+type RiskBlockAddRequest struct {
+	IP         string `json:"ip"`
+	ConfirmIP  string `json:"confirm_ip"`
+	TTLSeconds int64  `json:"ttl_seconds"`
+	Reason     string `json:"reason"`
+	Actor      string `json:"-"`
+}
+
+type RiskBlockUnblockRequest struct {
+	IP        string `json:"ip"`
+	ConfirmIP string `json:"confirm_ip"`
+	Actor     string `json:"-"`
+}
+
+type RiskBlockMutationResponse struct {
+	Scope   string          `json:"scope"`
+	Changed bool            `json:"changed"`
+	Entry   PendingEntryDTO `json:"entry"`
 }
 
 type AuditListRequest struct {
@@ -207,11 +237,16 @@ type AuditListResponse struct {
 }
 
 type AuditEventDTO struct {
-	Timestamp int64  `json:"timestamp"`
-	Action    string `json:"action"`
-	Actor     string `json:"actor"`
-	RequestID string `json:"request_id,omitempty"`
-	IP        string `json:"ip,omitempty"`
-	OK        bool   `json:"ok"`
-	Detail    string `json:"detail,omitempty"`
+	Timestamp  int64  `json:"timestamp"`
+	Action     string `json:"action"`
+	Actor      string `json:"actor"`
+	RequestID  string `json:"request_id,omitempty"`
+	IP         string `json:"ip,omitempty"`
+	Target     string `json:"target,omitempty"`
+	Source     string `json:"source,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+	Code       string `json:"code,omitempty"`
+	TTLSeconds int64  `json:"ttl_seconds,omitempty"`
+	OK         bool   `json:"ok"`
+	Detail     string `json:"detail,omitempty"`
 }

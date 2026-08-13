@@ -17,6 +17,12 @@ type PendingSnapshotSource interface {
 	Snapshot() []risk.PendingSnapshot
 }
 
+// IPBlockAdmin is the instance-scoped mutation capability used by Phase 2.
+type IPBlockAdmin interface {
+	Block(ip string, input risk.BlockInput) (risk.BlockResult, error)
+	Unblock(ip string) (risk.BlockResult, error)
+}
+
 // ComponentProbe is one runtime dependency health check.
 type ComponentProbe struct {
 	Name     string

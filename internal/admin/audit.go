@@ -18,12 +18,17 @@ type AuditLogger interface {
 
 // AuditEvent is one admin action.
 type AuditEvent struct {
-	Action    string // RPC name, e.g. "config.validate"
-	Actor     string // authenticated identity, or "anonymous"
-	RequestID string
-	IP        string
-	OK        bool   // whether the action succeeded
-	Detail    string // short context; must not carry secrets
+	Action     string // RPC name, e.g. "config.validate"
+	Actor      string // authenticated identity, or "anonymous"
+	RequestID  string
+	IP         string // admin caller IP
+	Target     string // target IP fingerprint; never the raw target IP
+	Source     string
+	Reason     string
+	Code       string
+	TTLSeconds int64
+	OK         bool   // whether the action succeeded
+	Detail     string // short context; must not carry secrets
 }
 
 // NopAuditLogger discards everything. Used in tests and when no logger is
@@ -57,6 +62,21 @@ func (a *LogAuditLogger) Log(ctx context.Context, e AuditEvent) {
 	}
 	if e.IP != "" {
 		fields = append(fields, logging.String("ip", e.IP))
+	}
+	if e.Target != "" {
+		fields = append(fields, logging.String("target_ip_hash", e.Target))
+	}
+	if e.Source != "" {
+		fields = append(fields, logging.String("source", e.Source))
+	}
+	if e.Reason != "" {
+		fields = append(fields, logging.String("reason", e.Reason))
+	}
+	if e.Code != "" {
+		fields = append(fields, logging.String("code", e.Code))
+	}
+	if e.TTLSeconds > 0 {
+		fields = append(fields, logging.Int64("ttl_seconds", e.TTLSeconds))
 	}
 	if e.Detail != "" {
 		fields = append(fields, logging.String("detail", e.Detail))

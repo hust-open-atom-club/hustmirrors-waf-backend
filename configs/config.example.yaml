@@ -29,8 +29,8 @@ pow:
   # X-Pow-Dry-Run-Original-Error header. Useful for staging.
   dry_run: false
 
-  # Bypass all: every request is allowed with X-Pow-Reason=bypass_all.
-  # Use this as an emergency switch only.
+  # Bypass PoW and normal risk decisions. Admin-managed manual IP blocks are
+  # checked first and still reject. Use this as an emergency switch only.
   bypass_all: false
 
   # URL parameter names. Change here if your front-end uses a different
@@ -272,6 +272,17 @@ admin:
     - "10.0.0.0/8"
   # Records admin actions to the structured log (event=admin_audit).
   audit_log: true
+
+  # All mutating Admin RPCs remain disabled unless this master switch and the
+  # feature switch below are both enabled. auth.type=none is always read-only.
+  mutations_enabled: false
+  ip_block:
+    # Instance-scoped manual IP denylist. State is lost on restart and is not
+    # shared across replicas. Manual blocks take precedence over bypass_all.
+    enabled: false
+    default_ttl: "1h"
+    max_ttl: "24h"
+
   stats:
     # Optional read-only observability sources for the admin dashboard.
     # The backend exposes only fixed metric queries and the fixed Loki query.

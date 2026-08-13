@@ -23,6 +23,7 @@ type Service struct {
 	validator  Validator
 	usage      UsageReader
 	pending    PendingSnapshotSource
+	ipBlocks   IPBlockAdmin
 	metrics    *metrics.Container
 	probes     []ComponentProbe
 	prometheus *prometheusClient
@@ -35,6 +36,7 @@ type Options struct {
 	Validator  Validator
 	Usage      UsageReader
 	Pending    PendingSnapshotSource
+	IPBlocks   IPBlockAdmin
 	Metrics    *metrics.Container
 	Probes     []ComponentProbe
 }
@@ -46,6 +48,7 @@ func New(opts Options) (*Service, error) {
 		validator:  opts.Validator,
 		usage:      opts.Usage,
 		pending:    opts.Pending,
+		ipBlocks:   opts.IPBlocks,
 		metrics:    opts.Metrics,
 		probes:     append([]ComponentProbe(nil), opts.Probes...),
 	}

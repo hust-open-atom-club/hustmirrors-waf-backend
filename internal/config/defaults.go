@@ -124,6 +124,12 @@ func applyDefaults(c *Config) {
 	if c.Admin.Stats.QueryTimeout == 0 {
 		c.Admin.Stats.QueryTimeout = parseDur("2s")
 	}
+	if c.Admin.IPBlock.DefaultTTL == 0 {
+		c.Admin.IPBlock.DefaultTTL = time.Hour
+	}
+	if c.Admin.IPBlock.MaxTTL == 0 {
+		c.Admin.IPBlock.MaxTTL = 24 * time.Hour
+	}
 
 	if c.Cleanup.Enabled == nil {
 		on := true
