@@ -90,8 +90,17 @@ type RedisConfig struct {
 // When Enabled is false the service runs only the base PoW verification logic.
 type RiskControlConfig struct {
 	Enabled  bool                     `mapstructure:"enabled"`
+	Pending  PendingConfig            `mapstructure:"pending"`
 	Counters map[string]CounterConfig `mapstructure:"counters"`
 	Chains   map[string]ChainConfig   `mapstructure:"chains"`
+}
+
+type PendingConfig struct {
+	// Enabled is pointer-valued so omitted means enabled while explicit false
+	// disables pending blocking.
+	Enabled  *bool         `mapstructure:"enabled"`
+	MaxPerIP int           `mapstructure:"max_per_ip"`
+	BlockTTL time.Duration `mapstructure:"block_ttl"`
 }
 
 type CounterConfig struct {
@@ -161,13 +170,21 @@ type CounterMatch struct {
 }
 
 type AdminConfig struct {
-	Enabled    bool       `mapstructure:"enabled"`
-	Listen     string     `mapstructure:"listen"`
-	Auth       AuthConfig `mapstructure:"auth"`
-	AllowCIDRs []string   `mapstructure:"allow_cidrs"`
+	Enabled    bool             `mapstructure:"enabled"`
+	Listen     string           `mapstructure:"listen"`
+	Auth       AuthConfig       `mapstructure:"auth"`
+	AllowCIDRs []string         `mapstructure:"allow_cidrs"`
+	Stats      AdminStatsConfig `mapstructure:"stats"`
 	// AuditLog records admin actions. Pointer so an omitted key (-> true)
 	// differs from an explicit false.
 	AuditLog *bool `mapstructure:"audit_log"`
+}
+
+type AdminStatsConfig struct {
+	PrometheusURL string        `mapstructure:"prometheus_url"`
+	LokiURL       string        `mapstructure:"loki_url"`
+	LokiQuery     string        `mapstructure:"loki_query"`
+	QueryTimeout  time.Duration `mapstructure:"query_timeout"`
 }
 
 type AuthConfig struct {

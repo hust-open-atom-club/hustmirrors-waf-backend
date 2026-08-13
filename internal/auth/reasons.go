@@ -63,6 +63,7 @@ const (
 	ReasonIPMismatch        = "ip_mismatch"
 	ReasonUsedUp            = "used_up"
 	ReasonRateLimited       = "rate_limited"
+	ReasonIPPendingBlocked  = "ip_pending_blocked"
 	ReasonRiskReject        = "risk_reject"
 	ReasonRiskTooMany       = "risk_too_many"
 	ReasonStorageError      = "storage_error"
@@ -77,7 +78,7 @@ func statusForReason(reason string) int {
 		ReasonDryRunAllow, ReasonBypassAll, ReasonPowDisabled,
 		ReasonRiskAccept, ReasonRiskRateLimit, ReasonRequirePowPass:
 		return 200
-	case ReasonRateLimited, ReasonRiskTooMany:
+	case ReasonRateLimited, ReasonRiskTooMany, ReasonIPPendingBlocked:
 		return 429
 	case ReasonStorageError, ReasonInternalError, ReasonMissingHeaders,
 		ReasonMissingRealIP:

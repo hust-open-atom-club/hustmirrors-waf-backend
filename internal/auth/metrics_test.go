@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -29,15 +30,21 @@ func makeMetricsService(t *testing.T, cfg *config.Config, engine *risk.Engine) (
 		cfg = makeBaseConfig()
 	}
 	m := metrics.New()
+	var pendingBlocker risk.PendingBlocker
+	if cfg.RiskControl.Enabled {
+		pendingBlocker = risk.NewIPPendingBlocker(128, time.Hour)
+		t.Cleanup(func() { _ = pendingBlocker.Close() })
+	}
 	svc, err := New(Options{
 		Config: cfg,
 		Matcher: matcher.NewComposite(
 			matcher.NewExtensionMatcher(cfg.Protection.ProtectedExtensions), nil),
-		UsageStore: memory.NewUsageStore(),
-		Clock:      clock.NewFake(),
-		Logger:     logging.NewNop(),
-		Metrics:    m,
-		RiskEngine: engine,
+		UsageStore:     memory.NewUsageStore(),
+		Clock:          clock.NewFake(),
+		Logger:         logging.NewNop(),
+		Metrics:        m,
+		RiskEngine:     engine,
+		PendingBlocker: pendingBlocker,
 	})
 	require.NoError(t, err)
 	return svc, m

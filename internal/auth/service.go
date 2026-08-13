@@ -15,14 +15,15 @@ import (
 )
 
 type Service struct {
-	cfg        *config.Config
-	matcher    matcher.Matcher
-	usageStore storage.UsageStore
-	clock      clock.Clock
-	logger     logging.Logger
-	metrics    *metrics.Container
-	riskEngine *risk.Engine
-	counterReg *risk.CounterRegistry
+	cfg            *config.Config
+	matcher        matcher.Matcher
+	usageStore     storage.UsageStore
+	clock          clock.Clock
+	logger         logging.Logger
+	metrics        *metrics.Container
+	riskEngine     *risk.Engine
+	counterReg     *risk.CounterRegistry
+	pendingBlocker risk.PendingBlocker
 
 	ipBoundOpts pow.ValidatorOptions
 	genericOpts pow.ValidatorOptions
@@ -38,20 +39,22 @@ type Service struct {
 //   - UsageStore, when generic mode is enabled
 //   - RiskEngine, when risk_control is enabled
 //   - CounterReg, when risk_control counters are configured
+//   - PendingBlocker, when risk_control.pending is enabled
 //
 // Optional (nil defaults to a sensible no-op):
 //   - Clock nil -> real wall clock
 //   - Logger nil -> Nop logger
 //   - Metrics nil -> no metrics emitted
 type Options struct {
-	Config     *config.Config
-	Matcher    matcher.Matcher
-	UsageStore storage.UsageStore
-	Clock      clock.Clock
-	Logger     logging.Logger
-	Metrics    *metrics.Container
-	RiskEngine *risk.Engine
-	CounterReg *risk.CounterRegistry
+	Config         *config.Config
+	Matcher        matcher.Matcher
+	UsageStore     storage.UsageStore
+	Clock          clock.Clock
+	Logger         logging.Logger
+	Metrics        *metrics.Container
+	RiskEngine     *risk.Engine
+	CounterReg     *risk.CounterRegistry
+	PendingBlocker risk.PendingBlocker
 }
 
 func New(opts Options) (*Service, error) {
@@ -76,6 +79,10 @@ func New(opts Options) (*Service, error) {
 	if opts.Config.RiskControl.Enabled && len(opts.Config.RiskControl.Counters) > 0 && opts.CounterReg == nil {
 		return nil, errors.New("auth: CounterReg is required when risk_control counters are configured")
 	}
+	pendingEnabled := opts.Config.RiskControl.Pending.Enabled == nil || *opts.Config.RiskControl.Pending.Enabled
+	if opts.Config.RiskControl.Enabled && pendingEnabled && opts.PendingBlocker == nil {
+		return nil, errors.New("auth: PendingBlocker is required when risk_control.pending is enabled")
+	}
 	if opts.Clock == nil {
 		opts.Clock = clock.New()
 	}
@@ -84,14 +91,15 @@ func New(opts Options) (*Service, error) {
 	}
 
 	s := &Service{
-		cfg:        opts.Config,
-		matcher:    opts.Matcher,
-		usageStore: opts.UsageStore,
-		clock:      opts.Clock,
-		logger:     opts.Logger,
-		metrics:    opts.Metrics,
-		riskEngine: opts.RiskEngine,
-		counterReg: opts.CounterReg,
+		cfg:            opts.Config,
+		matcher:        opts.Matcher,
+		usageStore:     opts.UsageStore,
+		clock:          opts.Clock,
+		logger:         opts.Logger,
+		metrics:        opts.Metrics,
+		riskEngine:     opts.RiskEngine,
+		counterReg:     opts.CounterReg,
+		pendingBlocker: opts.PendingBlocker,
 	}
 
 	s.allowedSalts = append(s.allowedSalts, opts.Config.Pow.AllowedPreviousSalts...)
@@ -149,6 +157,16 @@ func (s *Service) Verify(ctx context.Context, req AuthRequest) AuthResult {
 	}
 
 	protected := s.matcher.ShouldProtect(req.OriginalURI)
+	pendingEnabled := s.cfg.RiskControl.Pending.Enabled == nil || *s.cfg.RiskControl.Pending.Enabled
+	if protected && s.cfg.RiskControl.Enabled && pendingEnabled && s.pendingBlocker != nil && !s.cfg.Pow.BypassAll {
+		release, blocked := s.pendingBlocker.Enter(req.RealIP)
+		if blocked {
+			res := denyStatus(429, ReasonIPPendingBlocked, "")
+			s.recordResult(vctx, res)
+			return res
+		}
+		defer release()
+	}
 	tokenRaw, sign := s.extractTokenAndSign(req.OriginalArgs)
 	// chargeQuotaForRiskAllow reads these off vctx. Leaving them unset made
 	// it derive the sign id from an empty sign, so the risk-allow path and

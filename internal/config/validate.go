@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -99,6 +100,15 @@ func Validate(c *Config) error {
 	}
 	if c.Pow.SignParam == "" {
 		e.add("pow.sign_param must not be empty")
+	}
+
+	if c.RiskControl.Pending.MaxPerIP <= 0 {
+		e.add("risk_control.pending.max_per_ip must be > 0")
+	} else if c.RiskControl.Pending.MaxPerIP > 1_000_000 {
+		e.add("risk_control.pending.max_per_ip must be <= 1000000")
+	}
+	if c.RiskControl.Pending.BlockTTL <= 0 {
+		e.add("risk_control.pending.block_ttl must be > 0")
 	}
 
 	if c.RiskControl.Enabled {
@@ -251,6 +261,24 @@ func (e *ValidationError) checkAdmin(a AdminConfig) {
 		if _, _, err := net.ParseCIDR(cidr); err != nil {
 			e.add("admin.allow_cidrs[%d]: %q is not a valid CIDR", i, cidr)
 		}
+	}
+	checkAdminURL(e, "admin.stats.prometheus_url", a.Stats.PrometheusURL)
+	checkAdminURL(e, "admin.stats.loki_url", a.Stats.LokiURL)
+	if a.Stats.LokiURL != "" && strings.TrimSpace(a.Stats.LokiQuery) == "" {
+		e.add("admin.stats.loki_query must be set when admin.stats.loki_url is configured")
+	}
+	if a.Stats.QueryTimeout <= 0 {
+		e.add("admin.stats.query_timeout must be > 0")
+	}
+}
+
+func checkAdminURL(e *ValidationError, name, raw string) {
+	if raw == "" {
+		return
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		e.add("%s must be an absolute http or https URL", name)
 	}
 }
 

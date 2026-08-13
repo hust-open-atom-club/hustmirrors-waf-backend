@@ -39,10 +39,11 @@ type App struct {
 	mainSrv  *echo.Server
 	adminSrv *echo.Server
 
-	storageCloser func() error
-	redisClient   *redis.Client
-	cleanupStop   context.CancelFunc
-	cleanupWG     sync.WaitGroup
+	storageCloser  func() error
+	redisClient    *redis.Client
+	pendingBlocker risk.PendingBlocker
+	cleanupStop    context.CancelFunc
+	cleanupWG      sync.WaitGroup
 }
 
 func Build(ctx context.Context, cfg *config.Config) (*App, error) {
@@ -90,9 +91,20 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 
 	var riskEngine *risk.Engine
 	var counterReg *risk.CounterRegistry
+	var pendingBlocker risk.PendingBlocker
 	if cfg.RiskControl.Enabled {
+		if pendingEnabled := cfg.RiskControl.Pending.Enabled == nil || *cfg.RiskControl.Pending.Enabled; pendingEnabled {
+			pendingBlocker = risk.NewIPPendingBlocker(
+				cfg.RiskControl.Pending.MaxPerIP,
+				cfg.RiskControl.Pending.BlockTTL,
+			)
+		}
+
 		riskEngine, err = risk.FromConfig(cfg.RiskControl)
 		if err != nil {
+			if pendingBlocker != nil {
+				_ = pendingBlocker.Close()
+			}
 			storageCloser()
 			return nil, fmt.Errorf("app: build risk engine: %w", err)
 		}
@@ -106,16 +118,20 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 
 	authSvc, err := auth.New(auth.Options{
-		Config:     cfg,
-		Matcher:    matcherComposite,
-		UsageStore: usageStore,
-		Clock:      clk,
-		Logger:     logger,
-		Metrics:    m,
-		RiskEngine: riskEngine,
-		CounterReg: counterReg,
+		Config:         cfg,
+		Matcher:        matcherComposite,
+		UsageStore:     usageStore,
+		Clock:          clk,
+		Logger:         logger,
+		Metrics:        m,
+		RiskEngine:     riskEngine,
+		CounterReg:     counterReg,
+		PendingBlocker: pendingBlocker,
 	})
 	if err != nil {
+		if pendingBlocker != nil {
+			_ = pendingBlocker.Close()
+		}
 		storageCloser()
 		return nil, fmt.Errorf("app: build auth service: %w", err)
 	}
@@ -125,30 +141,42 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 		if cfg.Admin.Auth.TokenFile != "" {
 			b, err := os.ReadFile(cfg.Admin.Auth.TokenFile)
 			if err != nil {
+				if pendingBlocker != nil {
+					_ = pendingBlocker.Close()
+				}
 				storageCloser()
 				return nil, fmt.Errorf("app: read admin token file: %w", err)
 			}
+
 			cfg.Admin.Auth.Token = strings.TrimSpace(string(b))
 		}
 		adminSvc, err = admin.New(admin.Options{
 			Config:     cfg,
 			Validator:  admin.DefaultValidator{},
 			RiskEngine: riskEngine,
+			Usage:      usageStore,
+			Pending:    pendingSnapshotSource(pendingBlocker),
+			Metrics:    m,
+			Probes:     buildAdminProbes(cfg, usageStore, counterStore),
 		})
 		if err != nil {
+			if pendingBlocker != nil {
+				_ = pendingBlocker.Close()
+			}
 			storageCloser()
 			return nil, fmt.Errorf("app: build admin service: %w", err)
 		}
 	}
 
 	a := &App{
-		cfg:           cfg,
-		logger:        logger,
-		metrics:       m,
-		authSvc:       authSvc,
-		adminSvc:      adminSvc,
-		storageCloser: storageCloser,
-		redisClient:   redisClient,
+		cfg:            cfg,
+		logger:         logger,
+		metrics:        m,
+		authSvc:        authSvc,
+		adminSvc:       adminSvc,
+		storageCloser:  storageCloser,
+		redisClient:    redisClient,
+		pendingBlocker: pendingBlocker,
 	}
 
 	a.mainSrv = echo.NewMain(echo.MainOptions{
@@ -179,6 +207,48 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 
 	return a, nil
+}
+
+func pendingSnapshotSource(blocker risk.PendingBlocker) admin.PendingSnapshotSource {
+	if source, ok := blocker.(admin.PendingSnapshotSource); ok {
+		return source
+	}
+	return nil
+}
+
+func buildAdminProbes(cfg *config.Config, usageStore storage.UsageStore, counterStore storage.CounterStore) []admin.ComponentProbe {
+	probes := make([]admin.ComponentProbe, 0, 2)
+	if usageStore != nil {
+		probes = append(probes, admin.ComponentProbe{
+			Name: "usage_store",
+			Check: func(ctx context.Context) error {
+				_, err := usageStore.Get(ctx, "__admin_health_probe__")
+				if errors.Is(err, storage.ErrNotFound) {
+					return nil
+				}
+				return err
+			},
+		})
+	}
+	if counterStore != nil {
+		probeName := "counter_store"
+		probe := admin.ComponentProbe{Name: probeName}
+		if cfg != nil && len(cfg.RiskControl.Counters) > 0 {
+			for name, counter := range cfg.RiskControl.Counters {
+				counterName := name
+				window := counter.Window
+				probe.Check = func(ctx context.Context) error {
+					_, err := counterStore.Get(ctx, counterName, "__admin_health_probe__", window)
+					return err
+				}
+				break
+			}
+		} else {
+			probe.Detail = "no configured counters"
+		}
+		probes = append(probes, probe)
+	}
+	return probes
 }
 
 func (a *App) Start() error {
@@ -224,6 +294,11 @@ func (a *App) Shutdown(ctx context.Context) error {
 	if a.adminSrv != nil {
 		if err := a.adminSrv.Shutdown(shutdownCtx); err != nil {
 			errs = append(errs, fmt.Errorf("admin server shutdown: %w", err))
+		}
+	}
+	if a.pendingBlocker != nil {
+		if err := a.pendingBlocker.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("pending blocker close: %w", err))
 		}
 	}
 	if a.storageCloser != nil {

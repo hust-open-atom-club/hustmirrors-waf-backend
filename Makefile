@@ -13,7 +13,7 @@ LDFLAGS := -s -w \
 	-X github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/version.Commit=$(COMMIT) \
 	-X github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/version.BuildTime=$(BUILD_TIME)
 
-.PHONY: all build run test test-race test-postgres coverage vet lint fmt tidy migrate-up migrate-down clean help
+.PHONY: all build run test test-race test-postgres coverage vet lint fmt tidy admin-ui-install admin-ui-check admin-ui-build build-all migrate-up migrate-down clean help
 
 all: build
 
@@ -54,6 +54,17 @@ fmt:
 tidy:
 	@$(GO) mod tidy
 
+admin-ui-install:
+	@npm --prefix admin-ui install
+
+admin-ui-check:
+	@npm --prefix admin-ui run check
+
+admin-ui-build:
+	@npm --prefix admin-ui run build
+
+build-all: admin-ui-build build
+
 migrate-up:
 	@$(GO) run github.com/pressly/goose/v3/cmd/goose -dir migrations up
 
@@ -73,7 +84,11 @@ help:
 	@echo "  coverage      - Generate coverage.out and print coverage summary"
 	@echo "  lint          - Run golangci-lint (fallback to go vet)"
 	@echo "  fmt           - Format Go sources"
-	@echo "  tidy         - go mod tidy"
+	@echo "  tidy          - go mod tidy"
+	@echo "  admin-ui-install - Install admin UI dependencies"
+	@echo "  admin-ui-check   - Type-check the admin UI"
+	@echo "  admin-ui-build   - Build embedded admin UI assets"
+	@echo "  build-all        - Build admin UI and backend"
 	@echo "  migrate-up   - Apply DB migrations"
 	@echo "  migrate-down - Roll back last DB migration"
 	@echo "  clean        - Remove build artifacts"

@@ -122,6 +122,10 @@ X-Pow-Trace: INPUT:missing-pow>RISK_CHECK,RISK_CHECK:too-many-1h
 
 > `generic` 模式的 `max_uses` 在**所有**放行路径上生效——`ACCEPT`、`RATE_LIMIT`
 > 和 `REQUIRE_POW` 都会扣减配额，命中规则不等于跳过配额。
+>
+> `risk_control.pending` 在进入规则链前限制同一 IP 同时执行的受保护鉴权请求数。
+> 超过 `max_per_ip` 后返回 429 `ip_pending_blocked`，并持续阻断 `block_ttl`。
+> 当前 pending/block 状态保存在单个后端进程内；多副本之间暂不共享。
 
 ---
 
@@ -274,6 +278,9 @@ print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 | `storage.driver` | `memory` | `memory` / `postgres` / `redis` |
 | `storage.counter_driver` | `memory` | `memory` / `redis` |
 | `risk_control.enabled` | `true` | 风控规则链 |
+| `risk_control.pending.enabled` | `true` | 是否启用同一 IP 的受保护请求并发限制与临时 block |
+| `risk_control.pending.max_per_ip` | `128` | 同一 IP 同时执行的受保护鉴权请求上限 |
+| `risk_control.pending.block_ttl` | `1h` | 超过 pending 上限后的 IP 临时 block 时长 |
 | `cleanup.enabled` | `true` | 过期记录回收 |
 | `logging.log_access` | `true` | 是否记录放行结果的日志 |
 | `logging.log_denied` | `true` | 是否记录拒绝结果的日志 |

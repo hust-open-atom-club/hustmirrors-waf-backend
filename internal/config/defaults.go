@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 // Exported so the admin API's config.validate can run the same defaults
 // pipeline against a candidate config without applying it.
 func ApplyDefaults(c *Config) {
@@ -67,6 +69,17 @@ func applyDefaults(c *Config) {
 		c.Pow.Modes.Generic.MaxUses = 5
 	}
 
+	if c.RiskControl.Pending.Enabled == nil {
+		on := true
+		c.RiskControl.Pending.Enabled = &on
+	}
+	if c.RiskControl.Pending.MaxPerIP == 0 {
+		c.RiskControl.Pending.MaxPerIP = 128
+	}
+	if c.RiskControl.Pending.BlockTTL == 0 {
+		c.RiskControl.Pending.BlockTTL = time.Hour
+	}
+
 	if c.Storage.Driver == "" {
 		c.Storage.Driver = "memory"
 	}
@@ -107,6 +120,9 @@ func applyDefaults(c *Config) {
 	if c.Admin.AuditLog == nil {
 		on := true
 		c.Admin.AuditLog = &on
+	}
+	if c.Admin.Stats.QueryTimeout == 0 {
+		c.Admin.Stats.QueryTimeout = parseDur("2s")
 	}
 
 	if c.Cleanup.Enabled == nil {

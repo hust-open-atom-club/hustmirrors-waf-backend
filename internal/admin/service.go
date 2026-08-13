@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/config"
+	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/metrics"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/risk"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/version"
 )
@@ -20,12 +21,22 @@ type Service struct {
 	cfg        *config.Config
 	riskEngine *risk.Engine
 	validator  Validator
+	usage      UsageReader
+	pending    PendingSnapshotSource
+	metrics    *metrics.Container
+	probes     []ComponentProbe
+	prometheus *prometheusClient
+	loki       *lokiClient
 }
 
 type Options struct {
 	Config     *config.Config
 	RiskEngine *risk.Engine
 	Validator  Validator
+	Usage      UsageReader
+	Pending    PendingSnapshotSource
+	Metrics    *metrics.Container
+	Probes     []ComponentProbe
 }
 
 func New(opts Options) (*Service, error) {
@@ -33,9 +44,21 @@ func New(opts Options) (*Service, error) {
 		cfg:        opts.Config,
 		riskEngine: opts.RiskEngine,
 		validator:  opts.Validator,
+		usage:      opts.Usage,
+		pending:    opts.Pending,
+		metrics:    opts.Metrics,
+		probes:     append([]ComponentProbe(nil), opts.Probes...),
 	}
 	if s.validator == nil {
 		s.validator = DefaultValidator{}
+	}
+	if s.cfg != nil {
+		if s.prometheus == nil {
+			s.prometheus = newPrometheusClient(s.cfg.Admin.Stats.PrometheusURL, s.cfg.Admin.Stats.QueryTimeout)
+		}
+		if s.loki == nil {
+			s.loki = newLokiClient(s.cfg.Admin.Stats.LokiURL, s.cfg.Admin.Stats.LokiQuery, s.cfg.Admin.Stats.QueryTimeout)
+		}
 	}
 	return s, nil
 }

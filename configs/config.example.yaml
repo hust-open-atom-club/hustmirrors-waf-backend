@@ -131,6 +131,13 @@ storage:
 risk_control:
   enabled: true
 
+  # Limit concurrent protected requests per client IP. When an IP exceeds
+  # this limit it is temporarily blocked in this backend instance.
+  pending:
+    enabled: true
+    max_per_ip: 128
+    block_ttl: "1h"
+
   counters:
     ip_protected_requests_10m:
       key: "ip"
@@ -265,6 +272,13 @@ admin:
     - "10.0.0.0/8"
   # Records admin actions to the structured log (event=admin_audit).
   audit_log: true
+  stats:
+    # Optional read-only observability sources for the admin dashboard.
+    # The backend exposes only fixed metric queries and the fixed Loki query.
+    prometheus_url: ""
+    loki_url: ""
+    loki_query: '{event="admin_audit"}'
+    query_timeout: "2s"
 
 logging:
   level: "info"                   # debug | info | warn | error

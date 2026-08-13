@@ -29,6 +29,10 @@ func makeTestService(t *testing.T, cfg *config.Config) (*Service, *clock.Fake, *
 // makeTestServiceWithEngine is makeTestService with a risk engine attached,
 // for the paths that only run when risk control is enabled.
 func makeTestServiceWithEngine(t *testing.T, cfg *config.Config, engine *risk.Engine) (*Service, *clock.Fake, *memory.UsageStore, func(payload pow.TokenPayload) (token, sign string)) {
+	return makeTestServiceWithEngineAndPending(t, cfg, engine, nil)
+}
+
+func makeTestServiceWithEngineAndPending(t *testing.T, cfg *config.Config, engine *risk.Engine, pendingBlocker risk.PendingBlocker) (*Service, *clock.Fake, *memory.UsageStore, func(payload pow.TokenPayload) (token, sign string)) {
 	t.Helper()
 	if cfg == nil {
 		cfg = makeBaseConfig()
@@ -38,13 +42,23 @@ func makeTestServiceWithEngine(t *testing.T, cfg *config.Config, engine *risk.En
 		nil,
 	)
 	store := memory.NewUsageStore()
+	if pendingBlocker == nil && cfg.RiskControl.Enabled {
+		pendingEnabled := cfg.RiskControl.Pending.Enabled == nil || *cfg.RiskControl.Pending.Enabled
+		if pendingEnabled {
+			pendingBlocker = risk.NewIPPendingBlocker(
+				cfg.RiskControl.Pending.MaxPerIP,
+				cfg.RiskControl.Pending.BlockTTL,
+			)
+			t.Cleanup(func() { _ = pendingBlocker.Close() })
+		}
+	}
 	fc := clock.NewFake()
 	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	fc.Set(now)
 	svc, err := New(Options{
 		Config: cfg, Matcher: m, UsageStore: store,
 		Clock: fc, Logger: logging.NewNop(), Metrics: metrics.New(),
-		RiskEngine: engine,
+		RiskEngine: engine, PendingBlocker: pendingBlocker,
 	})
 	require.NoError(t, err)
 
@@ -52,8 +66,7 @@ func makeTestServiceWithEngine(t *testing.T, cfg *config.Config, engine *risk.En
 		payload.Version = 1
 		payload.Algorithm = "sha256"
 		// Only set ts/exp/d/cnt/salt when not already populated by the caller
-		// (findValidCounterForDifficulty pre-populates these so that the
-		// sign it produced matches the sign mint() recomputes).
+		// (findValidCounterForDifficulty pre-populates these so that the sign it produced matches the sign mint() recomputes).
 		if payload.Timestamp == 0 {
 			payload.Timestamp = fc.Now().Unix()
 		}
