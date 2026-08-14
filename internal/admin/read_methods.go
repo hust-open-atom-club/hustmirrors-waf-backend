@@ -57,6 +57,17 @@ func (s *Service) DashboardSeries(ctx context.Context, req DashboardSeriesReques
 	return result, nil
 }
 
+// StatsSummary is the semantic statistics alias for the dashboard summary.
+// Keep the implementation shared so older dashboard clients remain compatible.
+func (s *Service) StatsSummary(ctx context.Context, req DashboardSummaryRequest) (DashboardSummaryResponse, error) {
+	return s.DashboardSummary(ctx, req)
+}
+
+// StatsTimeseries is the semantic statistics alias for the whitelisted series query.
+func (s *Service) StatsTimeseries(ctx context.Context, req DashboardSeriesRequest) (DashboardSeriesResponse, error) {
+	return s.DashboardSeries(ctx, req)
+}
+
 func (s *Service) SystemHealth(ctx context.Context, _ SystemHealthRequest) (SystemHealthResponse, error) {
 	components := []SourceStatus{
 		{Name: "admin_api", Status: "ok"},
@@ -275,6 +286,11 @@ func (s *Service) AuditList(ctx context.Context, req AuditListRequest) (AuditLis
 	result.Available = true
 	result.Events = events
 	return result, nil
+}
+
+// AuditSearch is the semantic search alias for the existing Loki-backed audit query.
+func (s *Service) AuditSearch(ctx context.Context, req AuditListRequest) (AuditListResponse, error) {
+	return s.AuditList(ctx, req)
 }
 
 func (s *Service) queryTimeout() time.Duration {

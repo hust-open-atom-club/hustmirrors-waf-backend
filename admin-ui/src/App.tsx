@@ -13,7 +13,6 @@ import {
   Gauge,
   KeyRound,
   LayoutDashboard,
-  ListFilter,
   LockKeyhole,
   Menu,
   Network,
@@ -44,13 +43,13 @@ import type {
 } from './types'
 import { formatDate, formatNumber, shortCommit } from './utils'
 
-type Page = 'overview' | 'rules' | 'tokens' | 'pending' | 'audit' | 'config'
+type Page = 'overview' | 'stats' | 'rules' | 'tokens' | 'pending' | 'audit' | 'config'
+type StatsRange = '1h' | '6h' | '24h'
+type StatsData = { range: StatsRange; series: Record<string, DashboardSeries> }
 
 const navItems: Array<{ id: Page; label: string; kicker: string; icon: typeof Activity }> = [
-  { id: 'overview', label: '概览', kicker: 'Overview', icon: LayoutDashboard },
-  { id: 'rules', label: '规则链', kicker: 'Risk chains', icon: ListFilter },
-  { id: 'tokens', label: 'Token 检索', kicker: 'Usage records', icon: KeyRound },
-  { id: 'pending', label: 'Pending', kicker: 'Instance guard', icon: TimerReset },
+  { id: 'overview', label: '总览监控', kicker: 'Monitoring', icon: LayoutDashboard },
+  { id: 'stats', label: '统计分析', kicker: 'Statistics', icon: BarChart3 },
   { id: 'audit', label: '审计轨迹', kicker: 'Audit stream', icon: FileSearch },
   { id: 'config', label: '配置管理', kicker: 'Draft & apply', icon: Settings2 },
 ]
@@ -73,6 +72,8 @@ function App() {
   const [error, setError] = useState('')
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [series, setSeries] = useState<DashboardSeries | null>(null)
+  const [statsRange, setStatsRange] = useState<StatsRange>('1h')
+  const [stats, setStats] = useState<StatsData | null>(null)
   const [health, setHealth] = useState<SystemHealth | null>(null)
   const [info, setInfo] = useState<SystemInfo | null>(null)
   const [rules, setRules] = useState<RuleList | null>(null)
@@ -109,18 +110,42 @@ function App() {
     }
   }, [auth])
 
-  const loadPageData = useCallback(async (signal?: AbortSignal) => {
-    if (page === 'overview') return loadOverview(signal)
+  const loadStats = useCallback(async (signal?: AbortSignal) => {
     setError('')
+    const ranges: Record<StatsRange, { seconds: number; step: number }> = {
+      '1h': { seconds: 60 * 60, step: 60 },
+      '6h': { seconds: 6 * 60 * 60, step: 300 },
+      '24h': { seconds: 24 * 60 * 60, step: 900 },
+    }
+    const range = ranges[statsRange]
+    const to = Math.floor(Date.now() / 1000)
+    const from = to - range.seconds
+    const metrics = ['pow_verify_total', 'pow_allowed_total', 'pow_denied_total', 'risk_decision_total']
     try {
-      if (page === 'rules') setRules(await rpc<RuleList>('rule.list', {}, auth, signal))
-      if (page === 'pending') setPending(await rpc<PendingList>('risk.blocks.list', {}, auth, signal))
-      if (page === 'audit') setAudit(await rpc<AuditList>('audit.list', { limit: 100 }, auth, signal))
+      const results = await Promise.all(metrics.map(async (metric) => [
+        metric,
+        await rpc<DashboardSeries>('stats.timeseries', { metric, from, to, step: range.step }, auth, signal),
+      ] as const))
+      setStats({ range: statsRange, series: Object.fromEntries(results) })
       setAuthRequired(false)
     } catch (reason) {
       handleLoadError(reason)
     }
-  }, [auth, loadOverview, page])
+  }, [auth, handleLoadError, statsRange])
+
+  const loadPageData = useCallback(async (signal?: AbortSignal) => {
+    if (page === 'overview') return loadOverview(signal)
+    if (page === 'stats') return loadStats(signal)
+    setError('')
+    try {
+      if (page === 'rules') setRules(await rpc<RuleList>('rule.list', {}, auth, signal))
+      if (page === 'pending') setPending(await rpc<PendingList>('risk.blocks.list', {}, auth, signal))
+      if (page === 'audit') setAudit(await rpc<AuditList>('audit.search', { limit: 100 }, auth, signal))
+      setAuthRequired(false)
+    } catch (reason) {
+      handleLoadError(reason)
+    }
+  }, [auth, handleLoadError, loadOverview, loadStats, page])
 
   useEffect(() => {
     window.location.hash = `/${page}`
@@ -241,6 +266,7 @@ function App() {
           {error && <div className="alert-banner" role="alert"><AlertTriangle size={18} /><div><strong>控制面连接异常</strong><span>{error}</span></div><button onClick={() => void refresh()}>重试</button></div>}
           {loading ? <LoadingState /> : <>
             {page === 'overview' && <OverviewPage summary={summary} series={series} health={health} onNavigate={navigate} />}
+            {page === 'stats' && <StatsPage stats={stats} range={statsRange} onRangeChange={setStatsRange} />}
             {page === 'rules' && <RulesPage rules={rules} auth={auth} onError={handleLoadError} />}
             {page === 'tokens' && <TokensPage auth={auth} onError={handleLoadError} />}
             {page === 'pending' && <PendingPage pending={pending} auth={auth} onError={handleLoadError} onChanged={async (message) => { await loadPageData(); setToast(message) }} />}
@@ -257,16 +283,17 @@ function App() {
 }
 
 function pageTitle(page: Page) {
-  return { overview: '系统概览', rules: '规则链', tokens: 'Token 检索', pending: 'Pending 守卫', audit: '审计轨迹', config: '配置管理' }[page]
+  return { overview: '总览监控', stats: '统计分析', rules: '规则链', tokens: 'Token 检索', pending: 'Pending 守卫', audit: '审计轨迹', config: '配置管理' }[page]
 }
 
 function pageDescription(page: Page) {
   return {
-    overview: '实时查看 PoW、风控决策和运行时依赖的健康状态。',
+    overview: '查看服务健康、关键开关、依赖状态和当前风险信号。',
+    stats: '从固定 Prometheus 指标观察验证、放行、拒绝和风险决策趋势。',
     rules: '以只读方式检查当前风险链，并对请求上下文进行安全预览。',
     tokens: '按 sign ID 查询使用记录；敏感字段已在服务端剥离。',
     pending: '查看当前实例的 Pending 状态，并执行受审计的人工 IP Block/Unblock。',
-    audit: '从结构化审计流中检索后台操作轨迹。',
+    audit: '检索谁在什么时候对控制面执行了什么操作。',
     config: '使用 CAS 草稿、校验与差异预览安全管理配置，并查看或回滚历史修订。',
   }[page]
 }
@@ -309,14 +336,51 @@ function OverviewPage({ summary, series, health, onNavigate }: { summary: Dashbo
       <div className="panel quick-panel">
         <PanelHeader title="快速入口" kicker="CONTROL SHORTCUTS" />
         <div className="quick-grid">
-          <QuickLink icon={ListFilter} title="检查规则链" detail="查看链和策略" onClick={() => onNavigate('rules')} />
-          <QuickLink icon={KeyRound} title="查 Token" detail="定位使用记录" onClick={() => onNavigate('tokens')} />
-          <QuickLink icon={FileSearch} title="审计轨迹" detail="检索操作事件" onClick={() => onNavigate('audit')} />
-          <QuickLink icon={FileCode2} title="生效配置" detail="查看脱敏配置" onClick={() => onNavigate('config')} />
+          <QuickLink icon={BarChart3} title="打开统计" detail="查看固定指标趋势" onClick={() => onNavigate('stats')} />
+          <QuickLink icon={FileSearch} title="审计轨迹" detail="检索管理操作事件" onClick={() => onNavigate('audit')} />
+          <QuickLink icon={FileCode2} title="配置中心" detail="校验和审查配置版本" onClick={() => onNavigate('config')} />
         </div>
       </div>
     </section>
   </>
+}
+
+const statsMetricMeta = [
+  { key: 'pow_verify_total', label: '验证请求', icon: Zap, accent: 'cyan', description: 'PoW 验证速率' },
+  { key: 'pow_allowed_total', label: '允许通过', icon: ShieldCheck, accent: 'green', description: '有效验证速率' },
+  { key: 'pow_denied_total', label: '拒绝请求', icon: LockKeyhole, accent: 'red', description: '失败验证速率' },
+  { key: 'risk_decision_total', label: '风险决策', icon: Gauge, accent: 'amber', description: '风控决策速率' },
+] as const
+
+function StatsPage({ stats, range, onRangeChange }: { stats: StatsData | null; range: StatsRange; onRangeChange: (range: StatsRange) => void }) {
+  return <>
+    <div className="panel stats-toolbar">
+      <div><span className="toolbar-kicker">FIXED PROMETHEUS QUERIES</span><strong>统计窗口</strong><small>后端只执行固定指标查询，不接受任意 PromQL。</small></div>
+      <div className="stats-range" role="group" aria-label="统计时间范围">
+        {(['1h', '6h', '24h'] as StatsRange[]).map((value) => <button key={value} className={range === value ? 'is-active' : ''} onClick={() => onRangeChange(value)} aria-pressed={range === value}>{value}</button>)}
+      </div>
+    </div>
+    <section className="metric-grid stats-kpi-grid" aria-label="统计速率">
+      {statsMetricMeta.map((metric) => {
+        const series = stats?.series[metric.key]
+        const value = latestPoint(series)
+        return <MetricCard key={metric.key} label={metric.label} value={`${formatNumber(value)}/s`} sub={metric.description} icon={metric.icon} accent={metric.accent} />
+      })}
+    </section>
+    <section className="stats-chart-grid" aria-label="统计趋势图">
+      {statsMetricMeta.map((metric) => <div className="panel stats-chart-panel" key={metric.key}>
+        <PanelHeader title={metric.label} kicker={`${metric.key.toUpperCase()} · ${range.toUpperCase()}`} action={<span className={`source-badge ${stats?.series[metric.key]?.available ? 'good' : 'muted'}`}><Activity size={13} /> {stats?.series[metric.key]?.available ? 'LIVE' : 'UNAVAILABLE'}</span>} />
+        {stats?.series[metric.key]?.available && stats.series[metric.key].points.length > 0
+          ? <TrendChart points={stats.series[metric.key].points} label={metric.description} chartID={metric.key} />
+          : <EmptyState icon={BarChart3} title="暂无时序数据" description={stats?.series[metric.key]?.error ?? '配置 Prometheus 后启用固定指标查询。'} />}
+      </div>)}
+    </section>
+    <div className="stats-footnote" role="note"><Activity size={15} /><span>展示的是 Prometheus 速率查询结果；进程累计计数和依赖健康状态仍可在总览监控查看。</span></div>
+  </>
+}
+
+function latestPoint(series?: DashboardSeries) {
+  return series?.points.at(-1)?.value ?? 0
 }
 
 function MetricCard({ label, value, sub, icon: Icon, accent }: { label: string; value: string; sub: string; icon: typeof Activity; accent: string }) {
@@ -340,7 +404,7 @@ function QuickLink({ icon: Icon, title, detail, onClick }: { icon: typeof Activi
   return <button className="quick-link" onClick={onClick}><div className="quick-icon"><Icon size={18} /></div><span><strong>{title}</strong><small>{detail}</small></span><ChevronRight size={16} /></button>
 }
 
-function TrendChart({ points }: { points: Array<{ timestamp: number; value: number }> }) {
+function TrendChart({ points, label = '拒绝速率', chartID = 'trend-chart' }: { points: Array<{ timestamp: number; value: number }>; label?: string; chartID?: string }) {
   const width = 720
   const height = 220
   const pad = 24
@@ -352,7 +416,8 @@ function TrendChart({ points }: { points: Array<{ timestamp: number; value: numb
     const y = height - pad - ((point.value - min) / range) * (height - pad * 2)
     return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
   }).join(' ')
-  return <div className="chart-wrap"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`拒绝速率趋势，共 ${points.length} 个点`}><defs><linearGradient id="chart-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#4ee6d0" stopOpacity=".22" /><stop offset="100%" stopColor="#4ee6d0" stopOpacity="0" /></linearGradient></defs><line x1="24" x2="696" y1="44" y2="44" className="chart-gridline" /><line x1="24" x2="696" y1="110" y2="110" className="chart-gridline" /><line x1="24" x2="696" y1="176" y2="176" className="chart-gridline" /><path d={`${path} L 696 196 L 24 196 Z`} fill="url(#chart-fill)" /><path d={path} className="chart-line" fill="none" /></svg><div className="chart-axis"><span>{formatDate(points[0]?.timestamp)}</span><span>{formatDate(points.at(-1)?.timestamp)}</span></div><p className="chart-summary">服务端固定查询 · 仅展示拒绝速率 · 可通过 Prometheus 配置启用</p></div>
+  const fillID = `${chartID}-fill`
+  return <div className="chart-wrap"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${label}趋势，共 ${points.length} 个点`}><defs><linearGradient id={fillID} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#4ee6d0" stopOpacity=".22" /><stop offset="100%" stopColor="#4ee6d0" stopOpacity="0" /></linearGradient></defs><line x1="24" x2="696" y1="44" y2="44" className="chart-gridline" /><line x1="24" x2="696" y1="110" y2="110" className="chart-gridline" /><line x1="24" x2="696" y1="176" y2="176" className="chart-gridline" /><path d={`${path} L 696 196 L 24 196 Z`} fill={`url(#${fillID})`} /><path d={path} className="chart-line" fill="none" /></svg><div className="chart-axis"><span>{formatDate(points[0]?.timestamp)}</span><span>{formatDate(points.at(-1)?.timestamp)}</span></div><p className="chart-summary">服务端固定查询 · {label} · 可通过 Prometheus 配置启用</p></div>
 }
 
 function RulesPage({ rules, auth, onError }: { rules: RuleList | null; auth: AuthState; onError: (reason: unknown) => void }) {
@@ -440,7 +505,29 @@ function BlockMutationModal({ mode, expectedFingerprint, form, setForm, submitti
   return <div className="modal-scrim"><section className="auth-modal block-modal" role="dialog" aria-modal="true" aria-labelledby="block-title"><button className="modal-close icon-button" aria-label="关闭" onClick={onClose}><X size={18} /></button><div className="auth-icon danger-icon"><Ban size={22} /></div><span className="eyebrow">ADMIN MUTATION / INSTANCE</span><h2 id="block-title">{isAdd ? '添加人工 IP Block' : '解除人工 IP Block'}</h2><p>{isAdd ? '该操作优先于 bypass_all，并只作用于当前后端实例。' : '只清除人工 Block；仍有效的自动 Pending Block 不会被解除。'}</p>{expectedFingerprint && <div className="fingerprint-callout"><span>目标指纹</span><code>{expectedFingerprint}</code></div>}<div className="form-two block-form"><Field label="目标 IP"><input value={form.ip} autoFocus placeholder="192.0.2.1" onChange={(event) => setForm({ ...form, ip: event.target.value })} /></Field><Field label="再次输入 IP 确认"><input value={form.confirm_ip} placeholder="必须与目标 IP 完全一致" onChange={(event) => setForm({ ...form, confirm_ip: event.target.value })} /></Field></div>{isAdd && <><div className="form-two"><Field label="TTL（秒）"><input type="number" min="1" value={form.ttl_seconds} onChange={(event) => setForm({ ...form, ttl_seconds: event.target.value })} /></Field><Field label="原因"><input value={form.reason} maxLength={256} placeholder="必填，不得包含换行" onChange={(event) => setForm({ ...form, reason: event.target.value })} /></Field></div></>}{form.ip && form.confirm_ip && form.ip !== form.confirm_ip && <div className="inline-error" role="alert">两次输入的 IP 不一致。</div>}{error && <div className="inline-error" role="alert">{error}</div>}<div className="modal-actions"><button className="secondary-button" onClick={onClose} disabled={submitting}>取消</button><button className="danger-button" onClick={onSubmit} disabled={!ready || submitting}>{submitting ? <RefreshCw size={16} className="spin" /> : <Ban size={16} />} {isAdd ? '确认 Block' : '确认解除'}</button></div></section></div>
 }
 
-function AuditPage({ audit }: { audit: AuditList | null }) { const events = audit?.events ?? []; return <section className="single-layout"><div className="panel"><PanelHeader title="审计事件" kicker="ADMIN_AUDIT · LOKI" action={<span className={`source-badge ${audit?.available ? 'good' : 'muted'}`}><Activity size={13} /> {audit?.available ? 'LIVE' : 'UNAVAILABLE'}</span>} />{events.length === 0 ? <EmptyState icon={FileSearch} title="没有可展示的审计事件" description={audit?.error ?? '配置 Loki 后启用固定 LogQL 查询。'} /> : <div className="data-table-wrap"><table><thead><tr><th>时间</th><th>动作</th><th>操作者</th><th>目标 / 原因</th><th>结果</th><th>请求 ID</th><th>详情</th></tr></thead><tbody>{events.map((event, index) => <tr key={`${event.timestamp}-${event.action}-${index}`}><td className="mono">{formatDate(event.timestamp)}</td><td><strong>{event.action}</strong></td><td>{event.actor}</td><td><span className="mono">{event.target || '—'}</span><small className="table-subtext">{event.reason || event.source || '—'}</small></td><td><span className={`table-status ${event.ok ? 'good' : 'danger'}`}><span /> {event.ok ? 'OK' : event.code || 'ERROR'}</span></td><td className="mono">{event.request_id || '—'}</td><td>{event.detail || '—'}</td></tr>)}</tbody></table></div>}</div></section> }
+function AuditPage({ audit }: { audit: AuditList | null }) {
+  const events = audit?.events ?? []
+  const [actionFilter, setActionFilter] = useState('')
+  const [resultFilter, setResultFilter] = useState<'all' | 'ok' | 'error'>('all')
+  const actions = Array.from(new Set(events.map((event) => event.action))).sort()
+  const filtered = events.filter((event) => {
+    if (actionFilter && event.action !== actionFilter) return false
+    if (resultFilter === 'ok' && !event.ok) return false
+    if (resultFilter === 'error' && event.ok) return false
+    return true
+  })
+  return <section className="single-layout">
+    <div className="panel">
+      <PanelHeader title="审计事件" kicker="ADMIN_AUDIT · LOKI" action={<span className={`source-badge ${audit?.available ? 'good' : 'muted'}`}><Activity size={13} /> {audit?.available ? 'LIVE' : 'UNAVAILABLE'}</span>} />
+      <div className="audit-toolbar">
+        <label><span>动作</span><select value={actionFilter} onChange={(event) => setActionFilter(event.target.value)}><option value="">全部动作</option>{actions.map((action) => <option key={action} value={action}>{action}</option>)}</select></label>
+        <label><span>结果</span><select value={resultFilter} onChange={(event) => setResultFilter(event.target.value as 'all' | 'ok' | 'error')}><option value="all">全部结果</option><option value="ok">成功</option><option value="error">失败</option></select></label>
+        <span className="audit-count">显示 {filtered.length} / {events.length} 条 · 最近 24 小时</span>
+      </div>
+      {filtered.length === 0 ? <EmptyState icon={FileSearch} title="没有可展示的审计事件" description={audit?.error ?? (events.length > 0 ? '当前筛选条件没有匹配事件。' : '配置 Loki 后启用固定 LogQL 查询。')} /> : <div className="data-table-wrap"><table><thead><tr><th>时间</th><th>动作</th><th>操作者</th><th>目标 / 原因</th><th>结果</th><th>请求 ID</th><th>详情</th></tr></thead><tbody>{filtered.map((event, index) => <tr key={`${event.timestamp}-${event.action}-${index}`}><td className="mono">{formatDate(event.timestamp)}</td><td><strong>{event.action}</strong></td><td>{event.actor}</td><td><span className="mono">{event.target || '—'}</span><small className="table-subtext">{event.reason || event.source || '—'}</small></td><td><span className={`table-status ${event.ok ? 'good' : 'danger'}`}><span /> {event.ok ? 'OK' : event.code || 'ERROR'}</span></td><td className="mono">{event.request_id || '—'}</td><td>{event.detail || '—'}</td></tr>)}</tbody></table></div>}
+    </div>
+  </section>
+}
 
 function ConfigPage({ auth, onError, onToast }: { auth: AuthState; onError: (reason: unknown) => void; onToast: (message: string) => void }) { return <ConfigManagement auth={auth} onError={onError} onToast={onToast} /> }
 

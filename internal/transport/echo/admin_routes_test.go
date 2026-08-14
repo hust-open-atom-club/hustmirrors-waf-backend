@@ -26,6 +26,8 @@ func TestAdminRoutesExposePhase3ControlPlane(t *testing.T) {
 		"/admin/api/system.health",
 		"/admin/api/dashboard.summary",
 		"/admin/api/dashboard.series",
+		"/admin/api/stats.summary",
+		"/admin/api/stats.timeseries",
 		"/admin/api/config.get",
 		"/admin/api/config.validate",
 		"/admin/api/config.status",
@@ -45,6 +47,7 @@ func TestAdminRoutesExposePhase3ControlPlane(t *testing.T) {
 		"/admin/api/risk.blocks.add",
 		"/admin/api/risk.blocks.unblock",
 		"/admin/api/audit.list",
+		"/admin/api/audit.search",
 	} {
 		assert.True(t, paths[path], path)
 	}

@@ -45,6 +45,8 @@ func (s *Server) registerAdminRoutes() {
 	api.POST("/system.health", s.adminSystemHealth)
 	api.POST("/dashboard.summary", s.adminDashboardSummary)
 	api.POST("/dashboard.series", s.adminDashboardSeries)
+	api.POST("/stats.summary", s.adminStatsSummary)
+	api.POST("/stats.timeseries", s.adminStatsTimeseries)
 	api.POST("/config.get", s.adminConfigGet)
 	api.POST("/rule.list", s.adminRuleList)
 	api.POST("/token.get", s.adminTokenGet)
@@ -53,6 +55,7 @@ func (s *Server) registerAdminRoutes() {
 	api.POST("/risk.blocks.add", s.adminRiskBlocksAdd)
 	api.POST("/risk.blocks.unblock", s.adminRiskBlocksUnblock)
 	api.POST("/audit.list", s.adminAuditList)
+	api.POST("/audit.search", s.adminAuditSearch)
 
 	// The SPA shell is protected by the network allow-list only. API calls
 	// still carry their own admin credentials in the browser's memory.

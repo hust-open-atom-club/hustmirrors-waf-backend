@@ -28,6 +28,20 @@ func (s *Server) adminDashboardSeries(c echov4.Context) error {
 	return s.writeAdminResponse(c, r, err, "dashboard.series")
 }
 
+func (s *Server) adminStatsSummary(c echov4.Context) error {
+	r, err := s.adminSvc.StatsSummary(c.Request().Context(), admin.DashboardSummaryRequest{})
+	return s.writeAdminResponse(c, r, err, "stats.summary")
+}
+
+func (s *Server) adminStatsTimeseries(c echov4.Context) error {
+	var req admin.DashboardSeriesRequest
+	if err := c.Bind(&req); err != nil {
+		return s.writeAdminError(c, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body", "stats.timeseries")
+	}
+	r, err := s.adminSvc.StatsTimeseries(c.Request().Context(), req)
+	return s.writeAdminResponse(c, r, err, "stats.timeseries")
+}
+
 func (s *Server) adminConfigGet(c echov4.Context) error {
 	r, err := s.adminSvc.ConfigGet(c.Request().Context(), admin.ConfigGetRequest{})
 	return s.writeAdminResponse(c, r, err, "config.get")
@@ -62,4 +76,13 @@ func (s *Server) adminAuditList(c echov4.Context) error {
 	}
 	r, err := s.adminSvc.AuditList(c.Request().Context(), req)
 	return s.writeAdminResponse(c, r, err, "audit.list")
+}
+
+func (s *Server) adminAuditSearch(c echov4.Context) error {
+	var req admin.AuditListRequest
+	if err := c.Bind(&req); err != nil {
+		return s.writeAdminError(c, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body", "audit.search")
+	}
+	r, err := s.adminSvc.AuditSearch(c.Request().Context(), req)
+	return s.writeAdminResponse(c, r, err, "audit.search")
 }
