@@ -283,6 +283,12 @@ admin:
     default_ttl: "1h"
     max_ttl: "24h"
 
+  config_management:
+    # Single-instance draft/diff/history/apply/rollback. Requires an explicit
+    # --config path, mutations_enabled=true, and token/basic Admin auth. Apply
+    # only updates the file; restart the service to activate the new config.
+    enabled: false
+
   stats:
     # Optional read-only observability sources for the admin dashboard.
     # The backend exposes only fixed metric queries and the fixed Loki query.

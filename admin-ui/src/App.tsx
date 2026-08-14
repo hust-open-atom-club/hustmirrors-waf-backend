@@ -28,11 +28,10 @@ import {
   Zap,
 } from 'lucide-react'
 import { AuthRequiredError, rpc } from './api'
+import ConfigManagement from './components/ConfigManagement'
 import type {
   AuditList,
   AuthState,
-  ConfigGet,
-  ConfigValidate,
   DashboardSeries,
   DashboardSummary,
   PendingList,
@@ -43,7 +42,7 @@ import type {
   SystemInfo,
   TokenGet,
 } from './types'
-import { formatDate, formatNumber, shortCommit, stringify } from './utils'
+import { formatDate, formatNumber, shortCommit } from './utils'
 
 type Page = 'overview' | 'rules' | 'tokens' | 'pending' | 'audit' | 'config'
 
@@ -53,7 +52,7 @@ const navItems: Array<{ id: Page; label: string; kicker: string; icon: typeof Ac
   { id: 'tokens', label: 'Token 检索', kicker: 'Usage records', icon: KeyRound },
   { id: 'pending', label: 'Pending', kicker: 'Instance guard', icon: TimerReset },
   { id: 'audit', label: '审计轨迹', kicker: 'Audit stream', icon: FileSearch },
-  { id: 'config', label: '生效配置', kicker: 'Read-only view', icon: Settings2 },
+  { id: 'config', label: '配置管理', kicker: 'Draft & apply', icon: Settings2 },
 ]
 
 function initialAuth(): AuthState {
@@ -79,8 +78,17 @@ function App() {
   const [rules, setRules] = useState<RuleList | null>(null)
   const [pending, setPending] = useState<PendingList | null>(null)
   const [audit, setAudit] = useState<AuditList | null>(null)
-  const [config, setConfig] = useState<ConfigGet | null>(null)
   const [toast, setToast] = useState('')
+
+  const handleLoadError = useCallback((reason: unknown) => {
+    if (reason instanceof AuthRequiredError) {
+      setAuthRequired(true)
+      setError('管理 API 需要凭据。凭据仅保存在当前页面内存中。')
+      return
+    }
+    if (reason instanceof DOMException && reason.name === 'AbortError') return
+    setError(reason instanceof Error ? reason.message : '无法连接到后台 API')
+  }, [])
 
   const loadOverview = useCallback(async (signal?: AbortSignal) => {
     setError('')
@@ -108,22 +116,11 @@ function App() {
       if (page === 'rules') setRules(await rpc<RuleList>('rule.list', {}, auth, signal))
       if (page === 'pending') setPending(await rpc<PendingList>('risk.blocks.list', {}, auth, signal))
       if (page === 'audit') setAudit(await rpc<AuditList>('audit.list', { limit: 100 }, auth, signal))
-      if (page === 'config') setConfig(await rpc<ConfigGet>('config.get', {}, auth, signal))
       setAuthRequired(false)
     } catch (reason) {
       handleLoadError(reason)
     }
   }, [auth, loadOverview, page])
-
-  const handleLoadError = (reason: unknown) => {
-    if (reason instanceof AuthRequiredError) {
-      setAuthRequired(true)
-      setError('管理 API 需要凭据。凭据仅保存在当前页面内存中。')
-      return
-    }
-    if (reason instanceof DOMException && reason.name === 'AbortError') return
-    setError(reason instanceof Error ? reason.message : '无法连接到后台 API')
-  }
 
   useEffect(() => {
     window.location.hash = `/${page}`
@@ -248,7 +245,7 @@ function App() {
             {page === 'tokens' && <TokensPage auth={auth} onError={handleLoadError} />}
             {page === 'pending' && <PendingPage pending={pending} auth={auth} onError={handleLoadError} onChanged={async (message) => { await loadPageData(); setToast(message) }} />}
             {page === 'audit' && <AuditPage audit={audit} />}
-            {page === 'config' && <ConfigPage config={config} auth={auth} onError={handleLoadError} />}
+            {page === 'config' && <ConfigPage auth={auth} onError={handleLoadError} onToast={setToast} />}
           </>}
         </div>
       </main>
@@ -260,7 +257,7 @@ function App() {
 }
 
 function pageTitle(page: Page) {
-  return { overview: '系统概览', rules: '规则链', tokens: 'Token 检索', pending: 'Pending 守卫', audit: '审计轨迹', config: '生效配置' }[page]
+  return { overview: '系统概览', rules: '规则链', tokens: 'Token 检索', pending: 'Pending 守卫', audit: '审计轨迹', config: '配置管理' }[page]
 }
 
 function pageDescription(page: Page) {
@@ -270,7 +267,7 @@ function pageDescription(page: Page) {
     tokens: '按 sign ID 查询使用记录；敏感字段已在服务端剥离。',
     pending: '查看当前实例的 Pending 状态，并执行受审计的人工 IP Block/Unblock。',
     audit: '从结构化审计流中检索后台操作轨迹。',
-    config: '查看已生效配置的脱敏视图，并在应用前验证候选 YAML。',
+    config: '使用 CAS 草稿、校验与差异预览安全管理配置，并查看或回滚历史修订。',
   }[page]
 }
 
@@ -445,7 +442,7 @@ function BlockMutationModal({ mode, expectedFingerprint, form, setForm, submitti
 
 function AuditPage({ audit }: { audit: AuditList | null }) { const events = audit?.events ?? []; return <section className="single-layout"><div className="panel"><PanelHeader title="审计事件" kicker="ADMIN_AUDIT · LOKI" action={<span className={`source-badge ${audit?.available ? 'good' : 'muted'}`}><Activity size={13} /> {audit?.available ? 'LIVE' : 'UNAVAILABLE'}</span>} />{events.length === 0 ? <EmptyState icon={FileSearch} title="没有可展示的审计事件" description={audit?.error ?? '配置 Loki 后启用固定 LogQL 查询。'} /> : <div className="data-table-wrap"><table><thead><tr><th>时间</th><th>动作</th><th>操作者</th><th>目标 / 原因</th><th>结果</th><th>请求 ID</th><th>详情</th></tr></thead><tbody>{events.map((event, index) => <tr key={`${event.timestamp}-${event.action}-${index}`}><td className="mono">{formatDate(event.timestamp)}</td><td><strong>{event.action}</strong></td><td>{event.actor}</td><td><span className="mono">{event.target || '—'}</span><small className="table-subtext">{event.reason || event.source || '—'}</small></td><td><span className={`table-status ${event.ok ? 'good' : 'danger'}`}><span /> {event.ok ? 'OK' : event.code || 'ERROR'}</span></td><td className="mono">{event.request_id || '—'}</td><td>{event.detail || '—'}</td></tr>)}</tbody></table></div>}</div></section> }
 
-function ConfigPage({ config, auth, onError }: { config: ConfigGet | null; auth: AuthState; onError: (reason: unknown) => void }) { const [yaml, setYaml] = useState(''); const [validation, setValidation] = useState<ConfigValidate | null>(null); const validate = async () => { try { setValidation(await rpc<ConfigValidate>('config.validate', { config_yaml: yaml }, auth)) } catch (reason) { onError(reason) } }; return <section className="split-layout config-layout"><div className="panel"><PanelHeader title="当前配置" kicker="EFFECTIVE · SANITIZED" /><pre className="config-view">{config ? stringify(config.config) : '暂无配置数据'}</pre></div><div className="panel"><PanelHeader title="候选校验" kicker="VALIDATE BEFORE APPLY" /><textarea className="yaml-editor" value={yaml} onChange={(event) => setYaml(event.target.value)} placeholder="粘贴候选 YAML，服务端只校验不写入…" /><button className="primary-button" onClick={() => void validate()} disabled={!yaml.trim()}><FileCode2 size={16} /> 校验候选配置</button>{validation && <div className={`validation-box ${validation.ok ? 'ok' : 'bad'}`}><strong>{validation.ok ? '配置通过校验' : '发现配置问题'}</strong>{validation.error && <p>{validation.error}</p>}{validation.problems?.map((problem) => <p key={problem}>· {problem}</p>)}</div>}</div></section> }
+function ConfigPage({ auth, onError, onToast }: { auth: AuthState; onError: (reason: unknown) => void; onToast: (message: string) => void }) { return <ConfigManagement auth={auth} onError={onError} onToast={onToast} /> }
 
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}</label> }
 function EmptyState({ icon: Icon, title, description }: { icon: typeof Activity; title: string; description: string }) { return <div className="empty-state"><div className="empty-icon"><Icon size={22} /></div><strong>{title}</strong><p>{description}</p></div> }

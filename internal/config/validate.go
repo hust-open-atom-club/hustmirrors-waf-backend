@@ -279,6 +279,14 @@ func (e *ValidationError) checkAdmin(a AdminConfig) {
 	if a.IPBlock.DefaultTTL > a.IPBlock.MaxTTL {
 		e.add("admin.ip_block.default_ttl must be <= admin.ip_block.max_ttl")
 	}
+	if a.ConfigManagement.Enabled {
+		if !a.MutationsEnabled {
+			e.add("admin.config_management.enabled requires admin.mutations_enabled=true")
+		}
+		if a.Auth.Type != "token" && a.Auth.Type != "basic" {
+			e.add("admin.config_management.enabled requires admin.auth.type=token or basic")
+		}
+	}
 }
 
 func checkAdminURL(e *ValidationError, name, raw string) {

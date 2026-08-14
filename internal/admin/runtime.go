@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 
+	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/configstore"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/risk"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/storage"
 )
@@ -21,6 +22,19 @@ type PendingSnapshotSource interface {
 type IPBlockAdmin interface {
 	Block(ip string, input risk.BlockInput) (risk.BlockResult, error)
 	Unblock(ip string) (risk.BlockResult, error)
+}
+
+// ConfigState exposes the single-instance configuration history and draft store.
+type ConfigState interface {
+	Status() configstore.Status
+	Current() (uint64, []byte, error)
+	SaveDraft(baseRevision uint64, id string, expectedRevision uint64, raw []byte) (configstore.Draft, error)
+	GetDraft(id string) (configstore.Draft, error)
+	MarkDraftValidated(id string, revision, diffRevision uint64) error
+	DiscardDraft(id string, expectedRevision uint64) error
+	Apply(req configstore.ApplyRequest) (configstore.ApplyResult, error)
+	History(limit int) ([]configstore.RevisionMeta, error)
+	HistoryGet(revision uint64) (configstore.Revision, error)
 }
 
 // ComponentProbe is one runtime dependency health check.

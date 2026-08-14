@@ -5,6 +5,7 @@ package admin
 
 import (
 	"context"
+	"sync"
 
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/config"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/metrics"
@@ -18,39 +19,45 @@ import (
 // through one response writer there, so a single call site covers all of
 // them including request-binding failures that never reach this package.
 type Service struct {
-	cfg        *config.Config
-	riskEngine *risk.Engine
-	validator  Validator
-	usage      UsageReader
-	pending    PendingSnapshotSource
-	ipBlocks   IPBlockAdmin
-	metrics    *metrics.Container
-	probes     []ComponentProbe
-	prometheus *prometheusClient
-	loki       *lokiClient
+	cfg         *config.Config
+	riskEngine  *risk.Engine
+	validator   Validator
+	usage       UsageReader
+	pending     PendingSnapshotSource
+	ipBlocks    IPBlockAdmin
+	configState ConfigState
+	metrics     *metrics.Container
+	probes      []ComponentProbe
+	prometheus  *prometheusClient
+	loki        *lokiClient
+	previewMu   sync.Mutex
+	previews    map[string]configPreview
 }
 
 type Options struct {
-	Config     *config.Config
-	RiskEngine *risk.Engine
-	Validator  Validator
-	Usage      UsageReader
-	Pending    PendingSnapshotSource
-	IPBlocks   IPBlockAdmin
-	Metrics    *metrics.Container
-	Probes     []ComponentProbe
+	Config      *config.Config
+	RiskEngine  *risk.Engine
+	Validator   Validator
+	Usage       UsageReader
+	Pending     PendingSnapshotSource
+	IPBlocks    IPBlockAdmin
+	ConfigState ConfigState
+	Metrics     *metrics.Container
+	Probes      []ComponentProbe
 }
 
 func New(opts Options) (*Service, error) {
 	s := &Service{
-		cfg:        opts.Config,
-		riskEngine: opts.RiskEngine,
-		validator:  opts.Validator,
-		usage:      opts.Usage,
-		pending:    opts.Pending,
-		ipBlocks:   opts.IPBlocks,
-		metrics:    opts.Metrics,
-		probes:     append([]ComponentProbe(nil), opts.Probes...),
+		cfg:         opts.Config,
+		riskEngine:  opts.RiskEngine,
+		validator:   opts.Validator,
+		usage:       opts.Usage,
+		pending:     opts.Pending,
+		ipBlocks:    opts.IPBlocks,
+		configState: opts.ConfigState,
+		metrics:     opts.Metrics,
+		probes:      append([]ComponentProbe(nil), opts.Probes...),
+		previews:    make(map[string]configPreview),
 	}
 	if s.validator == nil {
 		s.validator = DefaultValidator{}
@@ -78,14 +85,6 @@ func (s *Service) SystemInfo(_ context.Context, _ SystemInfoRequest) (SystemInfo
 		BuildTime: info.BuildTime,
 		GoVersion: info.GoVersion,
 	}, nil
-}
-
-func (s *Service) ConfigValidate(_ context.Context, req ConfigValidateRequest) (ConfigValidateResponse, error) {
-	problems, err := s.validator.ValidateConfig(req.ConfigYAML)
-	if err != nil {
-		return ConfigValidateResponse{OK: false, Error: err.Error()}, nil
-	}
-	return ConfigValidateResponse{OK: len(problems) == 0, Problems: problems}, nil
 }
 
 func (s *Service) RulePreview(ctx context.Context, req RulePreviewRequest) (RulePreviewResponse, error) {

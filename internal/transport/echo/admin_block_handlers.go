@@ -10,11 +10,15 @@ import (
 )
 
 type adminAuditMetadata struct {
-	target     string
-	source     string
-	reason     string
-	code       string
-	ttlSeconds int64
+	target          string
+	source          string
+	reason          string
+	code            string
+	ttlSeconds      int64
+	revision        uint64
+	changeCount     int
+	danger          string
+	restartRequired bool
 }
 
 const (

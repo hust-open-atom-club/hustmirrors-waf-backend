@@ -96,17 +96,21 @@ func (s *Server) recordAdminAction(c echov4.Context, action, outcome, detail str
 	if s.auditLog != nil {
 		meta, _ := c.Get(adminAuditMetaKey).(adminAuditMetadata)
 		s.auditLog.Log(c.Request().Context(), admin.AuditEvent{
-			Action:     action,
-			Actor:      adminActor(c, s.cfg),
-			RequestID:  c.Response().Header().Get(echov4.HeaderXRequestID),
-			IP:         clientIP(c),
-			Target:     meta.target,
-			Source:     meta.source,
-			Reason:     meta.reason,
-			Code:       meta.code,
-			TTLSeconds: meta.ttlSeconds,
-			OK:         outcome == "ok",
-			Detail:     detail,
+			Action:          action,
+			Actor:           adminActor(c, s.cfg),
+			RequestID:       c.Response().Header().Get(echov4.HeaderXRequestID),
+			IP:              clientIP(c),
+			Target:          meta.target,
+			Source:          meta.source,
+			Reason:          meta.reason,
+			Code:            meta.code,
+			TTLSeconds:      meta.ttlSeconds,
+			Revision:        meta.revision,
+			ChangeCount:     meta.changeCount,
+			Danger:          meta.danger,
+			RestartRequired: meta.restartRequired,
+			OK:              outcome == "ok",
+			Detail:          detail,
 		})
 	}
 }

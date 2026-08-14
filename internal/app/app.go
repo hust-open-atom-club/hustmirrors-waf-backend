@@ -18,6 +18,7 @@ import (
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/auth"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/clock"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/config"
+	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/configstore"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/logging"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/matcher"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/metrics"
@@ -31,13 +32,14 @@ import (
 )
 
 type App struct {
-	cfg      *config.Config
-	logger   logging.Logger
-	metrics  *metrics.Container
-	authSvc  *auth.Service
-	adminSvc *admin.Service
-	mainSrv  *echo.Server
-	adminSrv *echo.Server
+	cfg         *config.Config
+	logger      logging.Logger
+	metrics     *metrics.Container
+	authSvc     *auth.Service
+	adminSvc    *admin.Service
+	mainSrv     *echo.Server
+	adminSrv    *echo.Server
+	configState admin.ConfigState
 
 	storageCloser  func() error
 	redisClient    *redis.Client
@@ -47,6 +49,20 @@ type App struct {
 }
 
 func Build(ctx context.Context, cfg *config.Config) (*App, error) {
+	return build(ctx, cfg, nil)
+}
+
+// BuildWithLoaded preserves configuration source metadata for the optional
+// single-instance configuration manager while keeping Build compatible with
+// embedders and tests that construct Config directly.
+func BuildWithLoaded(ctx context.Context, loaded *config.Loaded) (*App, error) {
+	if loaded == nil {
+		return nil, errors.New("app: loaded config is nil")
+	}
+	return build(ctx, loaded.Config, loaded)
+}
+
+func build(ctx context.Context, cfg *config.Config, loaded *config.Loaded) (*App, error) {
 	if cfg == nil {
 		return nil, errors.New("app: config is nil")
 	}
@@ -137,6 +153,16 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("app: build auth service: %w", err)
 	}
 
+	var configState admin.ConfigState
+	if loaded != nil && loaded.Managed && cfg.Admin.ConfigManagement.Enabled {
+		state, stateErr := configstore.New(loaded.Path, loaded.Raw, true)
+		if stateErr != nil {
+			logger.Warn(ctx, "configuration management unavailable; continuing read-only", logging.Err(stateErr))
+		} else {
+			configState = state
+		}
+	}
+
 	var adminSvc *admin.Service
 	if cfg.Admin.Enabled {
 		if cfg.Admin.Auth.TokenFile != "" {
@@ -152,14 +178,15 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 			cfg.Admin.Auth.Token = strings.TrimSpace(string(b))
 		}
 		adminSvc, err = admin.New(admin.Options{
-			Config:     cfg,
-			Validator:  admin.DefaultValidator{},
-			RiskEngine: riskEngine,
-			Usage:      usageStore,
-			Pending:    pendingSnapshotSource(pendingBlocker),
-			IPBlocks:   ipBlockAdmin(pendingBlocker),
-			Metrics:    m,
-			Probes:     buildAdminProbes(cfg, usageStore, counterStore),
+			Config:      cfg,
+			ConfigState: configState,
+			Validator:   admin.DefaultValidator{},
+			RiskEngine:  riskEngine,
+			Usage:       usageStore,
+			Pending:     pendingSnapshotSource(pendingBlocker),
+			IPBlocks:    ipBlockAdmin(pendingBlocker),
+			Metrics:     m,
+			Probes:      buildAdminProbes(cfg, usageStore, counterStore),
 		})
 		if err != nil {
 			if pendingBlocker != nil {
@@ -176,6 +203,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 		metrics:        m,
 		authSvc:        authSvc,
 		adminSvc:       adminSvc,
+		configState:    configState,
 		storageCloser:  storageCloser,
 		redisClient:    redisClient,
 		pendingBlocker: pendingBlocker,

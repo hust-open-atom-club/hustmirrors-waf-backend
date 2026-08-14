@@ -290,6 +290,7 @@ print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 | `admin.ip_block.enabled` | `false` | 启用实例级人工 IP Block/Unblock |
 | `admin.ip_block.default_ttl` | `1h` | 未指定 TTL 时的人工 Block 时长 |
 | `admin.ip_block.max_ttl` | `24h` | 人工 Block 最大时长，不支持永久 Block |
+| `admin.config_management.enabled` | `false` | 单实例配置草稿、Diff、历史、Apply/回滚；Apply 后需重启生效 |
 
 以上默认值为 `true` 的布尔开关都是「省略即开启」——配置里不写不会把它们关掉。
 
@@ -301,6 +302,12 @@ print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 > 避免管理接口在无认证状态下启动。`type: none` 仅在监听 loopback
 > 或配置了 `allow_cidrs` 时接受。
 
+> 配置管理只在使用显式非空 `--config <path>` 启动、`admin.mutations_enabled=true`、
+> `admin.config_management.enabled=true` 且 Admin 鉴权为 token/basic 时可写。草稿保存在
+> 当前实例内存，历史保存在配置文件同目录的 `.mirrors-waf-history/`。Apply/rollback 只原子
+> 更新配置文件，不修改当前运行态；操作成功后必须重启服务。敏感值在编辑器中显示为
+> `${SECRET:KEEP}`，本阶段不支持通过 API 轮换秘密。
+>
 > `logging.log_*` 只影响日志，**不影响指标**——关掉日志不会让监控失明。
 > 5xx 无论如何都记录，因为那是服务自身故障而非对请求的判定。
 
@@ -332,6 +339,7 @@ MIRRORS_WAF_STORAGE__DRIVER=postgres
 │   ├── transport/echo/      # HTTP 层
 │   ├── admin/               # 管理 API
 │   ├── config/              # 配置 + 校验
+│   ├── configstore/         # 单实例草稿、历史、原子写盘和回滚
 │   ├── logging/             # zap 包装
 │   └── metrics/             # Prometheus
 ├── configs/                  # 示例配置

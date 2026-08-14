@@ -20,13 +20,19 @@ func main() {
 	configPath := flag.String("config", "", "Path to the YAML config file (optional; auto-discovered if empty)")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
+	configExplicit := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "config" {
+			configExplicit = true
+		}
+	})
 
 	if *showVersion {
 		fmt.Println(version.Get())
 		return
 	}
 
-	cfg, err := config.Load(*configPath)
+	loaded, err := config.LoadWithSource(*configPath, configExplicit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "config load failed: %v\n", err)
 		os.Exit(2)
@@ -35,7 +41,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	a, err := app.Build(ctx, cfg)
+	a, err := app.BuildWithLoaded(ctx, loaded)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "app build failed: %v\n", err)
 		os.Exit(1)

@@ -24,14 +24,154 @@ type SystemInfoResponse struct {
 }
 
 type ConfigValidateRequest struct {
-	ConfigYAML string `json:"config_yaml"`
+	ConfigYAML    string `json:"config_yaml,omitempty"`
+	DraftID       string `json:"draft_id,omitempty"`
+	DraftRevision uint64 `json:"draft_revision,omitempty"`
 }
 
 type ConfigValidateResponse struct {
-	OK       bool     `json:"ok"`
-	Problems []string `json:"problems,omitempty"`
-	Error    string   `json:"error,omitempty"`
+	OK              bool     `json:"ok"`
+	Valid           bool     `json:"valid"`
+	Problems        []string `json:"problems,omitempty"`
+	Error           string   `json:"error,omitempty"`
+	DraftID         string   `json:"draft_id,omitempty"`
+	DraftRevision   uint64   `json:"draft_revision,omitempty"`
+	RestartRequired bool     `json:"restart_required"`
 }
+
+type ConfigStatusRequest struct{}
+
+type ConfigStatusResponse struct {
+	Managed         bool               `json:"managed"`
+	CurrentRevision uint64             `json:"current_revision,omitempty"`
+	PendingRestart  bool               `json:"pending_restart"`
+	Draft           *DraftSummary      `json:"draft,omitempty"`
+	Capabilities    ConfigCapabilities `json:"capabilities"`
+}
+
+type ConfigCapabilities struct {
+	Managed          bool `json:"managed"`
+	MutationsEnabled bool `json:"mutations_enabled"`
+	ApplyEnabled     bool `json:"apply_enabled"`
+	HistoryEnabled   bool `json:"history_enabled"`
+}
+
+type DraftSummary struct {
+	ID           string `json:"id"`
+	Revision     uint64 `json:"revision"`
+	BaseRevision uint64 `json:"base_revision"`
+	UpdatedAt    int64  `json:"updated_at"`
+	Validated    bool   `json:"validated"`
+}
+
+type ConfigDraftSaveRequest struct {
+	DraftID               string `json:"draft_id,omitempty"`
+	ExpectedDraftRevision uint64 `json:"expected_draft_revision,omitempty"`
+	BaseRevision          uint64 `json:"base_revision,omitempty"`
+	ConfigYAML            string `json:"config_yaml"`
+}
+
+type ConfigDraftGetRequest struct {
+	DraftID string `json:"draft_id,omitempty"`
+}
+type ConfigDraftDiscardRequest struct {
+	DraftID               string `json:"draft_id"`
+	ExpectedDraftRevision uint64 `json:"expected_draft_revision"`
+}
+
+type ConfigDraftResponse struct {
+	DraftID       string `json:"draft_id"`
+	DraftRevision uint64 `json:"draft_revision"`
+	BaseRevision  uint64 `json:"base_revision"`
+	UpdatedAt     int64  `json:"updated_at"`
+	ConfigYAML    string `json:"config_yaml"`
+	Validated     bool   `json:"validated"`
+}
+
+type ConfigDiffRequest struct {
+	DraftID        string `json:"draft_id,omitempty"`
+	DraftRevision  uint64 `json:"draft_revision,omitempty"`
+	TargetRevision uint64 `json:"target_revision,omitempty"`
+}
+
+type ConfigDiffChange struct {
+	Path            string      `json:"path"`
+	Kind            string      `json:"kind"`
+	Before          interface{} `json:"before,omitempty"`
+	After           interface{} `json:"after,omitempty"`
+	Sensitive       bool        `json:"sensitive"`
+	Danger          string      `json:"danger"`
+	RestartRequired bool        `json:"restart_required"`
+}
+
+type ConfigDiffResponse struct {
+	PreviewID          string             `json:"preview_id"`
+	BaseRevision       uint64             `json:"base_revision"`
+	CandidateRevision  uint64             `json:"candidate_revision,omitempty"`
+	Changes            []ConfigDiffChange `json:"changes"`
+	Danger             string             `json:"danger"`
+	RestartRequired    bool               `json:"restart_required"`
+	ConfirmationPhrase string             `json:"confirmation_phrase,omitempty"`
+}
+
+type ConfigApplyRequest struct {
+	DraftID            string `json:"draft_id,omitempty"`
+	DraftRevision      uint64 `json:"draft_revision,omitempty"`
+	PreviewID          string `json:"preview_id"`
+	ExpectedRevision   uint64 `json:"expected_revision"`
+	Reason             string `json:"reason"`
+	Acknowledged       bool   `json:"acknowledged"`
+	ConfirmationPhrase string `json:"confirmation_phrase,omitempty"`
+	Actor              string `json:"-"`
+}
+
+type ConfigApplyResponse struct {
+	PreviousRevision uint64 `json:"previous_revision"`
+	Revision         uint64 `json:"revision"`
+	ChangeCount      int    `json:"change_count"`
+	Danger           string `json:"danger"`
+	RuntimeApplied   bool   `json:"runtime_applied"`
+	RestartRequired  bool   `json:"restart_required"`
+}
+
+type ConfigHistoryRequest struct {
+	Limit int `json:"limit"`
+}
+type ConfigHistoryResponse struct {
+	Entries []ConfigHistoryEntry `json:"entries"`
+}
+type ConfigHistoryEntry struct {
+	Revision        uint64 `json:"revision"`
+	ParentRevision  uint64 `json:"parent_revision,omitempty"`
+	Action          string `json:"action"`
+	Actor           string `json:"actor,omitempty"`
+	Reason          string `json:"reason,omitempty"`
+	RollbackTarget  uint64 `json:"rollback_target,omitempty"`
+	Changed         int    `json:"changed"`
+	Danger          string `json:"danger,omitempty"`
+	RestartRequired bool   `json:"restart_required"`
+	CreatedAt       int64  `json:"created_at"`
+}
+
+type ConfigHistoryGetRequest struct {
+	Revision uint64 `json:"revision"`
+}
+type ConfigHistoryGetResponse struct {
+	Revision   ConfigHistoryEntry `json:"revision"`
+	ConfigYAML string             `json:"config_yaml"`
+}
+
+type ConfigRollbackRequest struct {
+	TargetRevision     uint64 `json:"target_revision"`
+	PreviewID          string `json:"preview_id"`
+	ExpectedRevision   uint64 `json:"expected_revision"`
+	Reason             string `json:"reason"`
+	Acknowledged       bool   `json:"acknowledged"`
+	ConfirmationPhrase string `json:"confirmation_phrase,omitempty"`
+	Actor              string `json:"-"`
+}
+
+type ConfigRollbackResponse = ConfigApplyResponse
 
 type RulePreviewRequest struct {
 	Request RulePreviewRequestContext `json:"request"`
@@ -132,7 +272,12 @@ type SystemHealthResponse struct {
 type ConfigGetRequest struct{}
 
 type ConfigGetResponse struct {
-	Config map[string]interface{} `json:"config"`
+	Config          map[string]interface{} `json:"config"`
+	EditableYAML    string                 `json:"editable_yaml,omitempty"`
+	Managed         bool                   `json:"managed"`
+	CurrentRevision uint64                 `json:"current_revision,omitempty"`
+	PendingRestart  bool                   `json:"pending_restart"`
+	Capabilities    ConfigCapabilities     `json:"capabilities"`
 }
 
 type RuleListRequest struct{}
@@ -237,16 +382,20 @@ type AuditListResponse struct {
 }
 
 type AuditEventDTO struct {
-	Timestamp  int64  `json:"timestamp"`
-	Action     string `json:"action"`
-	Actor      string `json:"actor"`
-	RequestID  string `json:"request_id,omitempty"`
-	IP         string `json:"ip,omitempty"`
-	Target     string `json:"target,omitempty"`
-	Source     string `json:"source,omitempty"`
-	Reason     string `json:"reason,omitempty"`
-	Code       string `json:"code,omitempty"`
-	TTLSeconds int64  `json:"ttl_seconds,omitempty"`
-	OK         bool   `json:"ok"`
-	Detail     string `json:"detail,omitempty"`
+	Timestamp       int64  `json:"timestamp"`
+	Action          string `json:"action"`
+	Actor           string `json:"actor"`
+	RequestID       string `json:"request_id,omitempty"`
+	IP              string `json:"ip,omitempty"`
+	Target          string `json:"target,omitempty"`
+	Source          string `json:"source,omitempty"`
+	Reason          string `json:"reason,omitempty"`
+	Code            string `json:"code,omitempty"`
+	TTLSeconds      int64  `json:"ttl_seconds,omitempty"`
+	Revision        uint64 `json:"revision,omitempty"`
+	ChangeCount     int    `json:"change_count,omitempty"`
+	Danger          string `json:"danger,omitempty"`
+	RestartRequired bool   `json:"restart_required,omitempty"`
+	OK              bool   `json:"ok"`
+	Detail          string `json:"detail,omitempty"`
 }

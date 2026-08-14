@@ -107,7 +107,7 @@ func (s *Service) ConfigGet(_ context.Context, _ ConfigGetRequest) (ConfigGetRes
 		return ConfigGetResponse{Config: map[string]interface{}{}}, nil
 	}
 	c := s.cfg
-	return ConfigGetResponse{Config: map[string]interface{}{
+	configView := map[string]interface{}{
 		"server": map[string]interface{}{
 			"listen": c.Server.Listen, "read_timeout": c.Server.ReadTimeout.String(),
 			"write_timeout": c.Server.WriteTimeout.String(), "idle_timeout": c.Server.IdleTimeout.String(),
@@ -144,11 +144,31 @@ func (s *Service) ConfigGet(_ context.Context, _ ConfigGetRequest) (ConfigGetRes
 			"audit_log":         boolValue(c.Admin.AuditLog),
 			"mutations_enabled": c.Admin.MutationsEnabled,
 			"ip_block":          map[string]interface{}{"enabled": c.Admin.IPBlock.Enabled, "default_ttl": c.Admin.IPBlock.DefaultTTL.String(), "max_ttl": c.Admin.IPBlock.MaxTTL.String()},
+			"config_management": map[string]interface{}{"enabled": c.Admin.ConfigManagement.Enabled},
 			"stats":             map[string]interface{}{"prometheus_configured": c.Admin.Stats.PrometheusURL != "", "loki_configured": c.Admin.Stats.LokiURL != "", "query_timeout": c.Admin.Stats.QueryTimeout.String()},
 		},
 		"logging": map[string]interface{}{"level": c.Logging.Level, "format": c.Logging.Format, "log_access": boolValue(c.Logging.LogAccess), "log_denied": boolValue(c.Logging.LogDenied), "hash_ip": c.Logging.HashIP, "log_salt": "[redacted]"},
 		"cleanup": map[string]interface{}{"enabled": boolValue(c.Cleanup.Enabled), "interval": c.Cleanup.Interval.String(), "expired_grace_period": c.Cleanup.ExpiredGracePeriod.String()},
-	}}, nil
+	}
+	result := ConfigGetResponse{Config: configView, Capabilities: ConfigCapabilities{}}
+	if s.configState != nil {
+		status := s.configState.Status()
+		result.Managed = status.Managed
+		result.CurrentRevision = status.CurrentRevision
+		result.PendingRestart = status.PendingRestart
+		result.Capabilities = ConfigCapabilities{
+			Managed:          status.Managed,
+			MutationsEnabled: c.Admin.MutationsEnabled,
+			ApplyEnabled: status.Managed && c.Admin.MutationsEnabled && c.Admin.ConfigManagement.Enabled &&
+				(c.Admin.Auth.Type == "token" || c.Admin.Auth.Type == "basic"),
+			HistoryEnabled: status.Managed,
+		}
+		_, raw, err := s.configState.Current()
+		if err == nil {
+			result.EditableYAML = redactYAML(raw)
+		}
+	}
+	return result, nil
 }
 
 func (s *Service) RuleList(_ context.Context, _ RuleListRequest) (RuleListResponse, error) {

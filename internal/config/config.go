@@ -170,13 +170,14 @@ type CounterMatch struct {
 }
 
 type AdminConfig struct {
-	Enabled          bool               `mapstructure:"enabled"`
-	Listen           string             `mapstructure:"listen"`
-	Auth             AuthConfig         `mapstructure:"auth"`
-	AllowCIDRs       []string           `mapstructure:"allow_cidrs"`
-	Stats            AdminStatsConfig   `mapstructure:"stats"`
-	MutationsEnabled bool               `mapstructure:"mutations_enabled"`
-	IPBlock          AdminIPBlockConfig `mapstructure:"ip_block"`
+	Enabled          bool                        `mapstructure:"enabled"`
+	Listen           string                      `mapstructure:"listen"`
+	Auth             AuthConfig                  `mapstructure:"auth"`
+	AllowCIDRs       []string                    `mapstructure:"allow_cidrs"`
+	Stats            AdminStatsConfig            `mapstructure:"stats"`
+	MutationsEnabled bool                        `mapstructure:"mutations_enabled"`
+	IPBlock          AdminIPBlockConfig          `mapstructure:"ip_block"`
+	ConfigManagement AdminConfigManagementConfig `mapstructure:"config_management"`
 	// AuditLog records admin actions. Pointer so an omitted key (-> true)
 	// differs from an explicit false.
 	AuditLog *bool `mapstructure:"audit_log"`
@@ -186,6 +187,10 @@ type AdminIPBlockConfig struct {
 	Enabled    bool          `mapstructure:"enabled"`
 	DefaultTTL time.Duration `mapstructure:"default_ttl"`
 	MaxTTL     time.Duration `mapstructure:"max_ttl"`
+}
+
+type AdminConfigManagementConfig struct {
+	Enabled bool `mapstructure:"enabled"`
 }
 
 type AdminStatsConfig struct {

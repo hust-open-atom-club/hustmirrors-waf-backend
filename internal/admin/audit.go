@@ -18,17 +18,21 @@ type AuditLogger interface {
 
 // AuditEvent is one admin action.
 type AuditEvent struct {
-	Action     string // RPC name, e.g. "config.validate"
-	Actor      string // authenticated identity, or "anonymous"
-	RequestID  string
-	IP         string // admin caller IP
-	Target     string // target IP fingerprint; never the raw target IP
-	Source     string
-	Reason     string
-	Code       string
-	TTLSeconds int64
-	OK         bool   // whether the action succeeded
-	Detail     string // short context; must not carry secrets
+	Action          string // RPC name, e.g. "config.validate"
+	Actor           string // authenticated identity, or "anonymous"
+	RequestID       string
+	IP              string // admin caller IP
+	Target          string // target IP fingerprint; never the raw target IP
+	Source          string
+	Reason          string
+	Code            string
+	TTLSeconds      int64
+	Revision        uint64
+	ChangeCount     int
+	Danger          string
+	RestartRequired bool
+	OK              bool   // whether the action succeeded
+	Detail          string // short context; must not carry secrets
 }
 
 // NopAuditLogger discards everything. Used in tests and when no logger is
@@ -77,6 +81,18 @@ func (a *LogAuditLogger) Log(ctx context.Context, e AuditEvent) {
 	}
 	if e.TTLSeconds > 0 {
 		fields = append(fields, logging.Int64("ttl_seconds", e.TTLSeconds))
+	}
+	if e.Revision > 0 {
+		fields = append(fields, logging.Int64("revision", int64(e.Revision)))
+	}
+	if e.ChangeCount > 0 {
+		fields = append(fields, logging.Int64("change_count", int64(e.ChangeCount)))
+	}
+	if e.Danger != "" {
+		fields = append(fields, logging.String("danger", e.Danger))
+	}
+	if e.RestartRequired {
+		fields = append(fields, logging.Bool("restart_required", true))
 	}
 	if e.Detail != "" {
 		fields = append(fields, logging.String("detail", e.Detail))

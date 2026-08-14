@@ -11,7 +11,7 @@ import (
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/logging"
 )
 
-func TestAdminRoutesExposePhase2ControlPlane(t *testing.T) {
+func TestAdminRoutesExposePhase3ControlPlane(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Admin.Auth.Type = "none"
 	svc, err := admin.New(admin.Options{Config: cfg})
@@ -28,6 +28,15 @@ func TestAdminRoutesExposePhase2ControlPlane(t *testing.T) {
 		"/admin/api/dashboard.series",
 		"/admin/api/config.get",
 		"/admin/api/config.validate",
+		"/admin/api/config.status",
+		"/admin/api/config.draft.save",
+		"/admin/api/config.draft.get",
+		"/admin/api/config.draft.discard",
+		"/admin/api/config.diff",
+		"/admin/api/config.apply",
+		"/admin/api/config.history",
+		"/admin/api/config.history.get",
+		"/admin/api/config.rollback",
 		"/admin/api/rule.list",
 		"/admin/api/rule.preview",
 		"/admin/api/token.get",
@@ -39,5 +48,5 @@ func TestAdminRoutesExposePhase2ControlPlane(t *testing.T) {
 	} {
 		assert.True(t, paths[path], path)
 	}
-	assert.False(t, paths["/admin/api/rule.reload"], "phase 2 must not expose config/rule reload")
+	assert.False(t, paths["/admin/api/rule.reload"], "phase 3 uses config.apply instead of rule.reload")
 }

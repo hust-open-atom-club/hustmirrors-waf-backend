@@ -130,7 +130,6 @@ func applyDefaults(c *Config) {
 	if c.Admin.IPBlock.MaxTTL == 0 {
 		c.Admin.IPBlock.MaxTTL = 24 * time.Hour
 	}
-
 	if c.Cleanup.Enabled == nil {
 		on := true
 		c.Cleanup.Enabled = &on

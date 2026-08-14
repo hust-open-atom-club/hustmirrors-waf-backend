@@ -43,6 +43,29 @@ func TestValidate_AdminIPBlockTTLRange(t *testing.T) {
 	assert.Contains(t, err.Error(), "default_ttl must be <=")
 }
 
+func TestValidate_AdminConfigManagementRequiresMutationAuth(t *testing.T) {
+	tests := []struct {
+		name      string
+		authType  string
+		mutations bool
+		want      string
+	}{
+		{name: "mutations disabled", authType: "token", mutations: false, want: "requires admin.mutations_enabled=true"},
+		{name: "none auth", authType: "none", mutations: true, want: "requires admin.auth.type=token or basic"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validAdminStatsConfig()
+			cfg.Admin.Auth.Type = tt.authType
+			cfg.Admin.MutationsEnabled = tt.mutations
+			cfg.Admin.ConfigManagement.Enabled = true
+			err := Validate(cfg)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.want)
+		})
+	}
+}
+
 func TestValidate_AdminStatsRejectsNonPositiveTimeout(t *testing.T) {
 	cfg := validAdminStatsConfig()
 	cfg.Admin.Stats.QueryTimeout = -time.Second
