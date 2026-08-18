@@ -1,0 +1,77 @@
+server:
+  listen: "0.0.0.0:8080"
+  read_timeout: "2s"
+  write_timeout: "2s"
+  idle_timeout: "30s"
+  shutdown_timeout: "2s"
+
+pow:
+  enabled: true
+  dry_run: false
+  bypass_all: false
+  token_param: "token"
+  sign_param: "sign"
+  max_token_length: 4096
+  max_sign_length: 128
+  algorithm: "sha256"
+  public_salt: "docker-test-only-change-me"
+  allow_empty_salt: false
+  modes:
+    ip_bound:
+      enabled: true
+      min_difficulty: 1
+      max_difficulty: 32
+      max_ttl_seconds: 86400
+      require_ip: true
+    generic:
+      enabled: false
+
+protection:
+  protected_extensions: [".iso"]
+  protected_paths: []
+  excluded_paths: []
+
+storage:
+  driver: "memory"
+  counter_driver: "memory"
+
+risk_control:
+  enabled: false
+  pending:
+    enabled: false
+
+admin:
+  enabled: true
+  listen: "0.0.0.0:8081"
+  auth:
+    type: "token"
+    token_file: "/run/secrets/admin.token"
+  allow_cidrs:
+    - "127.0.0.1/32"
+    - "172.16.0.0/12"
+  audit_log: true
+  mutations_enabled: false
+  ip_block:
+    enabled: false
+    default_ttl: "1h"
+    max_ttl: "24h"
+  config_management:
+    enabled: false
+  stats:
+    prometheus_url: ""
+    loki_url: ""
+    loki_query: '{event="admin_audit"}'
+    query_timeout: "2s"
+
+logging:
+  level: "info"
+  format: "json"
+  log_access: true
+  log_denied: true
+  hash_ip: false
+  log_salt: "docker-test-log-salt"
+
+cleanup:
+  enabled: false
+  interval: "10m"
+  expired_grace_period: "24h"

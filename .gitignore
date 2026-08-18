@@ -35,3 +35,7 @@ admin-ui/*.tsbuildinfo
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Docker deployment secrets
+deploy/docker/secrets/*
+!deploy/docker/secrets/.gitkeep

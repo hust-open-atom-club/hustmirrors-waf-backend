@@ -99,7 +99,103 @@ curl http://127.0.0.1:8080/readyz
 # {"status":"ok","storage":"ok"}
 ```
 
+### Docker 测试部署
+
+Docker 部署适合测试环境和单机联调。镜像内包含 Go 后端和构建后的 Admin UI，运行时使用 UID/GID `10001` 的非 root 用户。现有 systemd 部署不受影响。
+
+#### 1. 准备 Admin token
+
+不要把真实 token 写入配置文件或提交到 Git：
+
+```bash
+mkdir -p deploy/docker/secrets
+umask 077
+openssl rand -hex 32 > deploy/docker/secrets/admin.token
+```
+
+`deploy/docker/secrets/*` 已被 Git 忽略，只有 `.gitkeep` 会被提交。
+
+#### 2. 检查测试配置
+
+测试配置位于 `deploy/docker/config.test.yaml`，默认：
+
+- 主服务监听容器内 `0.0.0.0:8080`；
+- Admin Server 监听容器内 `0.0.0.0:8081`；
+- 宿主机只绑定 `127.0.0.1:8080` 和 `127.0.0.1:8081`；
+- 使用 memory storage，不依赖 PostgreSQL/Redis；
+- Admin 使用 `/run/secrets/admin.token`；
+- `mutations_enabled` 和 `config_management.enabled` 默认关闭；
+- Prometheus/Loki 未配置时，后台对应模块显示降级状态。
+
+`public_salt` 仅用于测试，进入共享环境前必须替换，并通过独立配置或密钥管理系统注入。
+
+#### 3. 构建并启动
+
+在仓库根目录执行：
+
+```bash
+docker compose -f deploy/docker/compose.test.yaml up -d --build
+```
+
+查看状态和日志：
+
+```bash
+docker compose -f deploy/docker/compose.test.yaml ps
+docker compose -f deploy/docker/compose.test.yaml logs -f mirrors-waf
+```
+
+停止并删除容器：
+
+```bash
+docker compose -f deploy/docker/compose.test.yaml down
+```
+
+#### 4. 健康检查和后台访问
+
+```bash
+curl http://127.0.0.1:8080/healthz
+curl http://127.0.0.1:8080/readyz
+```
+
+后台地址：
+
+```text
+http://127.0.0.1:8081/admin/
+```
+
+浏览器登录时使用 `deploy/docker/secrets/admin.token` 中的 token。Admin API 不直接暴露给公网；需要远程访问时，应通过 VPN、SSH 隧道或受控反向代理，并继续限制来源网段。
+
+#### 5. 容器安全约束
+
+测试 Compose 默认启用：
+
+- 非 root 用户 `10001:10001`；
+- `read_only: true` root filesystem；
+- `/tmp` 仅提供 64 MiB `tmpfs`；
+- 丢弃全部 Linux capabilities；
+- `no-new-privileges`；
+- Docker healthcheck 请求主服务 `/healthz`。
+
+配置管理 Apply 需要写入配置文件和 `.mirrors-waf-history` 目录。测试 Compose 默认关闭配置管理，不能直接用于验证 Apply/Rollback。若要验证该流程，应准备专用的可写配置卷、开启 `admin.mutations_enabled` 和 `admin.config_management.enabled`，并在测试结束后清理历史目录。
+
+#### 7. 接入 Prometheus/Loki
+
+将 `deploy/docker/config.test.yaml` 中的地址改为容器网络可访问的服务名，例如：
+
+```yaml
+admin:
+  stats:
+    prometheus_url: "http://prometheus:9090"
+    loki_url: "http://loki:3100"
+```
+
+不要让浏览器直接访问 Prometheus 或 Loki；后台 API 继续作为唯一聚合入口。
+
+---
+
 ### systemd 托管（生产用）
+
+Docker 测试部署不会替代现有 systemd 方式。生产环境仍可使用仓库中的 unit：
 
 ```bash
 sudo cp deploy/systemd/mirrors-waf-backend.service /etc/systemd/system/
