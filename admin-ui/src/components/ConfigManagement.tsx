@@ -25,10 +25,11 @@ const EMPTY_CAPABILITIES: ConfigCapabilities = {
   history_enabled: false,
 }
 
-export default function ConfigManagement({ auth, onError, onToast }: {
+export default function ConfigManagement({ auth, onError, onToast, refreshNonce }: {
   auth: AuthState
   onError: (reason: unknown) => void
   onToast: (message: string) => void
+  refreshNonce: number
 }) {
   const [config, setConfig] = useState<ConfigGet | null>(null)
   const [status, setStatus] = useState<ConfigStatus | null>(null)
@@ -104,7 +105,7 @@ export default function ConfigManagement({ auth, onError, onToast }: {
     return () => controller.abort()
   }, [loadState, reportError])
 
-  const refreshState = async () => {
+  const refreshState = useCallback(async () => {
     setNotice('')
     setOperation('confirm')
     try {
@@ -115,7 +116,12 @@ export default function ConfigManagement({ auth, onError, onToast }: {
     } finally {
       setOperation(null)
     }
-  }
+  }, [loadState, onToast, reportError])
+
+  useEffect(() => {
+    if (refreshNonce === 0) return
+    void refreshState()
+  }, [refreshNonce, refreshState])
 
   const saveDraft = async (showBusy = true): Promise<ConfigDraft | null> => {
     setNotice('')

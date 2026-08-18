@@ -69,6 +69,7 @@ function App() {
   const [authRequired, setAuthRequired] = useState(false)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [configRefreshNonce, setConfigRefreshNonce] = useState(0)
   const [error, setError] = useState('')
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [series, setSeries] = useState<DashboardSeries | null>(null)
@@ -159,10 +160,10 @@ function App() {
   }, [loadPageData])
 
   useEffect(() => {
-    if (page !== 'overview') return
+    if (page !== 'overview' || auth.mode === 'none' || authRequired) return
     const timer = window.setInterval(() => void loadOverview(), 30_000)
     return () => window.clearInterval(timer)
-  }, [loadOverview, page])
+  }, [auth, authRequired, loadOverview, page])
 
   useEffect(() => {
     if (!toast) return
@@ -173,6 +174,10 @@ function App() {
   const refresh = async () => {
     setRefreshing(true)
     try {
+      if (page === 'config') {
+        setConfigRefreshNonce((value) => value + 1)
+        return
+      }
       await loadPageData()
       setToast('数据已刷新')
     } finally {
@@ -271,7 +276,7 @@ function App() {
             {page === 'tokens' && <TokensPage auth={auth} onError={handleLoadError} />}
             {page === 'pending' && <PendingPage pending={pending} auth={auth} onError={handleLoadError} onChanged={async (message) => { await loadPageData(); setToast(message) }} />}
             {page === 'audit' && <AuditPage audit={audit} />}
-            {page === 'config' && <ConfigPage auth={auth} onError={handleLoadError} onToast={setToast} />}
+            {page === 'config' && <ConfigPage auth={auth} onError={handleLoadError} onToast={setToast} refreshNonce={configRefreshNonce} />}
           </>}
         </div>
       </main>
@@ -320,7 +325,7 @@ function OverviewPage({ summary, series, health, onNavigate }: { summary: Dashbo
         {series?.available && series.points.length > 0 ? <TrendChart points={series.points} /> : <EmptyState icon={BarChart3} title="暂无时序数据" description={series?.error ?? '配置 Prometheus 后启用固定指标查询。'} />}
       </div>
       <div className="panel health-panel">
-        <PanelHeader title="依赖健康" kicker="RUNTIME COMPONENTS" action={<span className="source-badge good"><span className="tiny-dot" /> {health?.ok ? 'ALL CLEAR' : 'CHECK REQUIRED'}</span>} />
+        <PanelHeader title="依赖健康" kicker="RUNTIME COMPONENTS" action={<span className={`source-badge ${health === null ? 'muted' : health.ok ? 'good' : 'danger'}`}><span className="tiny-dot" /> {health === null ? 'WAITING' : health.ok ? 'ALL CLEAR' : 'CHECK REQUIRED'}</span>} />
         <div className="health-list">{(health?.components ?? []).map((component) => <HealthRow key={component.name} {...component} />)}</div>
       </div>
     </section>
@@ -363,8 +368,10 @@ function StatsPage({ stats, range, onRangeChange }: { stats: StatsData | null; r
     <section className="metric-grid stats-kpi-grid" aria-label="统计速率">
       {statsMetricMeta.map((metric) => {
         const series = stats?.series[metric.key]
-        const value = latestPoint(series)
-        return <MetricCard key={metric.key} label={metric.label} value={`${formatNumber(value)}/s`} sub={metric.description} icon={metric.icon} accent={metric.accent} />
+        const available = series?.available === true && series.points.length > 0
+        const value = available ? `${formatNumber(latestPoint(series))}/s` : '—'
+        const description = available ? metric.description : 'Prometheus 暂无数据'
+        return <MetricCard key={metric.key} label={metric.label} value={value} sub={description} icon={metric.icon} accent={metric.accent} />
       })}
     </section>
     <section className="stats-chart-grid" aria-label="统计趋势图">
@@ -529,7 +536,7 @@ function AuditPage({ audit }: { audit: AuditList | null }) {
   </section>
 }
 
-function ConfigPage({ auth, onError, onToast }: { auth: AuthState; onError: (reason: unknown) => void; onToast: (message: string) => void }) { return <ConfigManagement auth={auth} onError={onError} onToast={onToast} /> }
+function ConfigPage({ auth, onError, onToast, refreshNonce }: { auth: AuthState; onError: (reason: unknown) => void; onToast: (message: string) => void; refreshNonce: number }) { return <ConfigManagement auth={auth} onError={onError} onToast={onToast} refreshNonce={refreshNonce} /> }
 
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}</label> }
 function EmptyState({ icon: Icon, title, description }: { icon: typeof Activity; title: string; description: string }) { return <div className="empty-state"><div className="empty-icon"><Icon size={22} /></div><strong>{title}</strong><p>{description}</p></div> }
