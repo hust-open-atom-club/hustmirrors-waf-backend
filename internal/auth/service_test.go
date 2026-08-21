@@ -355,6 +355,26 @@ func TestVerify_IPBoundIPMismatch(t *testing.T) {
 	assert.Equal(t, ReasonIPMismatch, res.Reason)
 }
 
+// TestVerify_IPBoundEmptyIPBindsToRequestIP: an ip_bound token minted with an
+// empty IP is accepted and bound to the presenting request's IP. The sign was
+// computed over the empty-ip canonical, so it must verify against that same
+// canonical regardless of the request IP.
+func TestVerify_IPBoundEmptyIPBindsToRequestIP(t *testing.T) {
+	svc, _, _, mint := makeTestService(t, nil)
+	payload := findValidCounterForDifficulty(t, pow.TokenPayload{
+		Mode: "ip_bound", Path: "/ubuntu.iso", IP: "",
+	}, 8)
+	token, sign := mint(payload)
+	res := svc.Verify(context.Background(), AuthRequest{
+		OriginalURI:    "/ubuntu.iso",
+		OriginalMethod: "GET",
+		OriginalArgs:   "token=" + token + "&sign=" + sign,
+		RealIP:         "203.0.113.7",
+	})
+	assert.True(t, res.Allowed, "empty-ip ip_bound token must bind to the request IP")
+	assert.Equal(t, ReasonIPBoundValid, res.Reason)
+}
+
 func TestVerify_GenericValid_AndUsedUp(t *testing.T) {
 	svc, _, _, mint := makeTestService(t, nil)
 	payload := findValidCounterForDifficulty(t, pow.TokenPayload{

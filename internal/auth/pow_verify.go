@@ -124,21 +124,32 @@ func (s *Service) finalizeByMode(ctx context.Context, req AuthRequest, payload *
 }
 
 func (s *Service) finalizeIPBound(ctx context.Context, p *pow.TokenPayload, req AuthRequest, tokenRaw, sign, mode string) AuthResult {
+	// An empty token IP means "bind to whoever presents this token": the
+	// backend fills in the requesting client's IP. A non-empty IP must match
+	// the request IP. The sign was verified earlier against the original
+	// (possibly empty) canonical, so filling here cannot break it.
 	if p.IP == "" {
-		return s.maybeDryRun(ctx, denyMode(ReasonIPMissing, mode))
-	}
-	// An absent X-Real-IP means Nginx is not forwarding it. Failing this as
-	// ip_mismatch would blame the client for a server misconfiguration and
-	// make every ip_bound token look forged, so surface it as a 500 with a
-	// distinct reason instead.
-	if req.RealIP == "" {
-		s.logger.Error(ctx, "X-Real-IP is empty; ip_bound tokens cannot be verified. "+
-			"Check that Nginx sets proxy_set_header X-Real-IP on the auth_request location",
-			logging.String("path", req.OriginalURI))
-		return denyStatus(500, ReasonMissingRealIP, mode)
-	}
-	if !sameIP(p.IP, req.RealIP) {
-		return s.maybeDryRun(ctx, denyMode(ReasonIPMismatch, mode))
+		if req.RealIP == "" {
+			s.logger.Error(ctx, "X-Real-IP is empty; ip_bound tokens cannot be verified. "+
+				"Check that Nginx sets proxy_set_header X-Real-IP on the auth_request location",
+				logging.String("path", req.OriginalURI))
+			return denyStatus(500, ReasonMissingRealIP, mode)
+		}
+		p.IP = req.RealIP
+	} else {
+		// An absent X-Real-IP means Nginx is not forwarding it. Failing this as
+		// ip_mismatch would blame the client for a server misconfiguration and
+		// make every ip_bound token look forged, so surface it as a 500 with a
+		// distinct reason instead.
+		if req.RealIP == "" {
+			s.logger.Error(ctx, "X-Real-IP is empty; ip_bound tokens cannot be verified. "+
+				"Check that Nginx sets proxy_set_header X-Real-IP on the auth_request location",
+				logging.String("path", req.OriginalURI))
+			return denyStatus(500, ReasonMissingRealIP, mode)
+		}
+		if !sameIP(p.IP, req.RealIP) {
+			return s.maybeDryRun(ctx, denyMode(ReasonIPMismatch, mode))
+		}
 	}
 	res := allow(ReasonIPBoundValid, mode)
 	res.SignID = pow.ComputeSignID(p, sign, mode)
@@ -231,14 +242,14 @@ func (s *Service) classifyPoW(ctx context.Context, tokenRaw, signValue, path, re
 	}
 
 	if mode == "ip_bound" {
-		// An absent X-Real-IP is a proxy misconfiguration, not a forged
-		// token, so this is deliberately distinct from "invalid" - but it
-		// is emphatically not "valid" either, since the binding this mode
-		// exists to enforce cannot be checked.
+		// An empty token IP binds to the requesting client (see
+		// finalizeIPBound), so it counts as matching whatever the request IP
+		// is. The canonical/sign was computed with the empty ip and verified
+		// above; do not fill payload.IP here, only when the verdict allows.
 		if realIP == "" {
 			return payload, "unverifiable", mode
 		}
-		if !sameIP(payload.IP, realIP) {
+		if payload.IP != "" && !sameIP(payload.IP, realIP) {
 			return payload, "invalid", mode
 		}
 	}

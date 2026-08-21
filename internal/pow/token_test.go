@@ -109,10 +109,13 @@ func TestValidatePayload_PathTooLong(t *testing.T) {
 	require.ErrorIs(t, err, ErrPathTooLong)
 }
 
-func TestValidatePayload_IPBoundRequiresIP(t *testing.T) {
+func TestValidatePayload_IPBoundEmptyIPAllowed(t *testing.T) {
+	// An ip_bound token with an empty IP is valid: the backend binds it to
+	// the IP of the request that presents it (auth.finalizeIPBound). The
+	// sign is computed over the empty-ip canonical.
 	p := &TokenPayload{Version: 1, Mode: "ip_bound", Algorithm: "sha256", Path: "/x", Timestamp: 1, ExpiresAt: 2, Difficulty: 1, Counter: "a"}
-	err := ValidatePayload(p, &ValidatorOptions{RequireIP: true, AllowedModes: []string{"ip_bound"}})
-	require.ErrorIs(t, err, ErrIPMissing)
+	err := ValidatePayload(p, &ValidatorOptions{RequireIP: true, AllowedModes: []string{"ip_bound"}, AllowEmptySalt: true})
+	require.NoError(t, err)
 }
 
 func TestValidatePayload_IPBoundBadIP(t *testing.T) {

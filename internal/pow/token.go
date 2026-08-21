@@ -139,11 +139,12 @@ func ValidatePayload(p *TokenPayload, opts *ValidatorOptions) error {
 
 	switch p.Mode {
 	case "ip_bound":
-		if p.IP == "" {
-			if opts != nil && opts.RequireIP {
-				return ErrIPMissing
-			}
-		} else if !isValidIPString(p.IP) {
+		// An empty IP is allowed: the backend then binds the token to the IP
+		// of the request that first presents it (see auth.finalizeIPBound).
+		// The sign was computed over the empty-ip canonical, so verification
+		// must also use the empty-ip canonical; the fill happens after the
+		// sign check, never before it.
+		if p.IP != "" && !isValidIPString(p.IP) {
 			return ErrIPInvalid
 		}
 	case "generic":
