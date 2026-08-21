@@ -124,36 +124,87 @@ func (s *Service) finalizeByMode(ctx context.Context, req AuthRequest, payload *
 }
 
 func (s *Service) finalizeIPBound(ctx context.Context, p *pow.TokenPayload, req AuthRequest, tokenRaw, sign, mode string) AuthResult {
-	// An empty token IP means "bind to whoever presents this token": the
-	// backend fills in the requesting client's IP. A non-empty IP must match
-	// the request IP. The sign was verified earlier against the original
-	// (possibly empty) canonical, so filling here cannot break it.
+	// An absent X-Real-IP means Nginx is not forwarding it. Failing this as
+	// ip_mismatch would blame the client for a server misconfiguration and
+	// make every ip_bound token look forged, so surface it as a 500 with a
+	// distinct reason instead.
+	if req.RealIP == "" {
+		s.logger.Error(ctx, "X-Real-IP is empty; ip_bound tokens cannot be verified. "+
+			"Check that Nginx sets proxy_set_header X-Real-IP on the auth_request location",
+			logging.String("path", req.OriginalURI))
+		return denyStatus(500, ReasonMissingRealIP, mode)
+	}
+
+	// The sign was verified earlier against the original (possibly empty)
+	// canonical, so mutating payload.IP here cannot break it.
 	if p.IP == "" {
-		if req.RealIP == "" {
-			s.logger.Error(ctx, "X-Real-IP is empty; ip_bound tokens cannot be verified. "+
-				"Check that Nginx sets proxy_set_header X-Real-IP on the auth_request location",
-				logging.String("path", req.OriginalURI))
-			return denyStatus(500, ReasonMissingRealIP, mode)
+		// Empty token IP: bind to the IP of the FIRST request that presents
+		// this token. The binding is recorded in the usage store keyed by
+		// sign id; later requests from other IPs get ip_mismatch.
+		if res, ok := s.bindEmptyIPFirstUse(ctx, p, req, tokenRaw, sign, mode); !ok {
+			return res
 		}
-		p.IP = req.RealIP
-	} else {
-		// An absent X-Real-IP means Nginx is not forwarding it. Failing this as
-		// ip_mismatch would blame the client for a server misconfiguration and
-		// make every ip_bound token look forged, so surface it as a 500 with a
-		// distinct reason instead.
-		if req.RealIP == "" {
-			s.logger.Error(ctx, "X-Real-IP is empty; ip_bound tokens cannot be verified. "+
-				"Check that Nginx sets proxy_set_header X-Real-IP on the auth_request location",
-				logging.String("path", req.OriginalURI))
-			return denyStatus(500, ReasonMissingRealIP, mode)
-		}
-		if !sameIP(p.IP, req.RealIP) {
-			return s.maybeDryRun(ctx, denyMode(ReasonIPMismatch, mode))
-		}
+	} else if !sameIP(p.IP, req.RealIP) {
+		return s.maybeDryRun(ctx, denyMode(ReasonIPMismatch, mode))
 	}
 	res := allow(ReasonIPBoundValid, mode)
 	res.SignID = pow.ComputeSignID(p, sign, mode)
 	return res
+}
+
+// bindEmptyIPFirstUse implements the first-use binding for ip_bound tokens
+// minted with an empty IP. It returns (_, true) when the request IP matches
+// the recorded first-use IP (or when no record existed and one was just
+// created, making this request the binding one). It returns (result, false)
+// with a denial the caller must return verbatim.
+func (s *Service) bindEmptyIPFirstUse(ctx context.Context, p *pow.TokenPayload, req AuthRequest, tokenRaw, sign, mode string) (AuthResult, bool) {
+	signID := pow.ComputeSignID(p, sign, mode)
+	p.IP = req.RealIP
+
+	if s.usageStore == nil {
+		// No store configured (e.g. storage disabled): the binding cannot be
+		// persisted, so fall back to per-request binding rather than failing
+		// every empty-IP token.
+		s.logger.Warn(ctx, "usage store not configured; empty-IP ip_bound token binds per request instead of first use",
+			logging.String("sign_id", signID))
+		return AuthResult{}, true
+	}
+
+	// Existing record: the first-use binding already happened.
+	if rec, err := s.usageStore.Get(ctx, signID); err == nil {
+		if rec.FirstIP != "" && !sameIP(rec.FirstIP, req.RealIP) {
+			return s.maybeDryRun(ctx, denyMode(ReasonIPMismatch, mode)), false
+		}
+		return AuthResult{}, true
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		return s.maybeDryRun(ctx, withSignID(denyStatus(500, ReasonStorageError, mode), signID)), false
+	}
+
+	// No record yet: this request is the binding one. Record it via Consume
+	// with SkipConsume so the counter is not charged (ip_bound has no
+	// max_uses); MaxUses=1 keeps the record permanently allowed.
+	grace := 0
+	if s.cfg.Cleanup.ExpiredGracePeriod > 0 {
+		grace = int(s.cfg.Cleanup.ExpiredGracePeriod.Seconds())
+	}
+	_, err := s.usageStore.Consume(ctx, storage.ConsumeInput{
+		ID:           signID,
+		Mode:         mode,
+		Path:         p.Path,
+		Sign:         sign,
+		TokenHash:    pow.HashToken(tokenRaw),
+		ExpiresAt:    p.ExpiresAt,
+		MaxUses:      1,
+		IP:           req.RealIP,
+		UserAgent:    req.UserAgent,
+		NowUnix:      s.clock.Now().Unix(),
+		GraceSeconds: grace,
+		SkipConsume:  true,
+	})
+	if err != nil {
+		return s.maybeDryRun(ctx, withSignID(denyStatus(500, ReasonStorageError, mode), signID)), false
+	}
+	return AuthResult{}, true
 }
 
 // consumeGenericQuota charges one use against a generic token's usage

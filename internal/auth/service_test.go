@@ -365,14 +365,35 @@ func TestVerify_IPBoundEmptyIPBindsToRequestIP(t *testing.T) {
 		Mode: "ip_bound", Path: "/ubuntu.iso", IP: "",
 	}, 8)
 	token, sign := mint(payload)
+
+	// First use from IP A: binds.
 	res := svc.Verify(context.Background(), AuthRequest{
 		OriginalURI:    "/ubuntu.iso",
 		OriginalMethod: "GET",
 		OriginalArgs:   "token=" + token + "&sign=" + sign,
 		RealIP:         "203.0.113.7",
 	})
-	assert.True(t, res.Allowed, "empty-ip ip_bound token must bind to the request IP")
+	assert.True(t, res.Allowed, "first presenting request must bind and pass")
 	assert.Equal(t, ReasonIPBoundValid, res.Reason)
+
+	// Second use from the same IP: still allowed.
+	res2 := svc.Verify(context.Background(), AuthRequest{
+		OriginalURI:    "/ubuntu.iso",
+		OriginalMethod: "GET",
+		OriginalArgs:   "token=" + token + "&sign=" + sign,
+		RealIP:         "203.0.113.7",
+	})
+	assert.True(t, res2.Allowed, "same IP must keep working")
+
+	// Use from a different IP: rejected as ip_mismatch.
+	res3 := svc.Verify(context.Background(), AuthRequest{
+		OriginalURI:    "/ubuntu.iso",
+		OriginalMethod: "GET",
+		OriginalArgs:   "token=" + token + "&sign=" + sign,
+		RealIP:         "198.51.100.9",
+	})
+	assert.False(t, res3.Allowed, "a different IP must be rejected after first-use binding")
+	assert.Equal(t, ReasonIPMismatch, res3.Reason)
 }
 
 func TestVerify_GenericValid_AndUsedUp(t *testing.T) {

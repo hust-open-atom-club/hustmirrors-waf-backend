@@ -382,25 +382,37 @@ func (s *Service) runRiskEngine(ctx context.Context, vctx *verifyCtx, riskReq *r
 // Only generic mode has a quota; ip_bound and token-less requests are
 // unaffected.
 func (s *Service) chargeQuotaForRiskAllow(ctx context.Context, vctx *verifyCtx, riskReq *risk.RequestContext) (AuthResult, bool) {
-	if riskReq.PowMode != "generic" || riskReq.PowStatus != "valid" || vctx.payload == nil {
+	if riskReq.PowStatus != "valid" || vctx.payload == nil {
 		return AuthResult{}, false
 	}
-	cr, signID, err := s.consumeGenericQuota(ctx, vctx.payload, vctx.req,
-		vctx.tokenRaw, vctx.sign, "generic", s.clock.Now().Unix())
-	if err != nil {
-		res := withSignID(denyStatus(500, ReasonStorageError, "generic"), signID)
-		s.recordResult(*vctx, res)
-		return res, true
+	if riskReq.PowMode == "generic" {
+		cr, signID, err := s.consumeGenericQuota(ctx, vctx.payload, vctx.req,
+			vctx.tokenRaw, vctx.sign, "generic", s.clock.Now().Unix())
+		if err != nil {
+			res := withSignID(denyStatus(500, ReasonStorageError, "generic"), signID)
+			s.recordResult(*vctx, res)
+			return res, true
+		}
+		if !cr.Allowed {
+			res := withSignID(denyMode(ReasonUsedUp, "generic"), signID)
+			res.Uses = cr.Uses
+			res.MaxUses = cr.MaxUses
+			res = s.maybeDryRun(ctx, res)
+			s.recordResult(*vctx, res)
+			return res, true
+		}
+		vctx.signID, vctx.uses, vctx.maxUses = signID, cr.Uses, cr.MaxUses
+		return AuthResult{}, false
 	}
-	if !cr.Allowed {
-		res := withSignID(denyMode(ReasonUsedUp, "generic"), signID)
-		res.Uses = cr.Uses
-		res.MaxUses = cr.MaxUses
-		res = s.maybeDryRun(ctx, res)
-		s.recordResult(*vctx, res)
-		return res, true
+	if riskReq.PowMode == "ip_bound" && vctx.payload.IP == "" {
+		// Empty-IP ip_bound tokens bind to the first presenting request. The
+		// risk engine's ACCEPT path never reaches finalizeIPBound, so the
+		// binding must be enforced here too.
+		if res, ok := s.bindEmptyIPFirstUse(ctx, vctx.payload, vctx.req, vctx.tokenRaw, vctx.sign, "ip_bound"); !ok {
+			s.recordResult(*vctx, res)
+			return res, true
+		}
 	}
-	vctx.signID, vctx.uses, vctx.maxUses = signID, cr.Uses, cr.MaxUses
 	return AuthResult{}, false
 }
 
