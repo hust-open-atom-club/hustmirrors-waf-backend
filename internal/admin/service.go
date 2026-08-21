@@ -28,6 +28,7 @@ type Service struct {
 	configState ConfigState
 	metrics     *metrics.Container
 	probes      []ComponentProbe
+	overrides   OverrideSource
 	prometheus  *prometheusClient
 	loki        *lokiClient
 	previewMu   sync.Mutex
@@ -44,6 +45,7 @@ type Options struct {
 	ConfigState ConfigState
 	Metrics     *metrics.Container
 	Probes      []ComponentProbe
+	Overrides   OverrideSource
 }
 
 func New(opts Options) (*Service, error) {
@@ -57,6 +59,7 @@ func New(opts Options) (*Service, error) {
 		configState: opts.ConfigState,
 		metrics:     opts.Metrics,
 		probes:      append([]ComponentProbe(nil), opts.Probes...),
+		overrides:   opts.Overrides,
 		previews:    make(map[string]configPreview),
 	}
 	if s.validator == nil {

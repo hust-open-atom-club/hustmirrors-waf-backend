@@ -187,6 +187,7 @@ func build(ctx context.Context, cfg *config.Config, loaded *config.Loaded) (*App
 			IPBlocks:    ipBlockAdmin(pendingBlocker),
 			Metrics:     m,
 			Probes:      buildAdminProbes(cfg, usageStore, counterStore),
+			Overrides:   authSvc,
 		})
 		if err != nil {
 			if pendingBlocker != nil {

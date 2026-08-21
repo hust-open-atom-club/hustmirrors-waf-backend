@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { AuthRequiredError, rpc } from './api'
 import ConfigManagement from './components/ConfigManagement'
+import RuntimeControls from './components/RuntimeControls'
 import type {
   AuditList,
   AuthState,
@@ -37,6 +38,7 @@ import type {
   RuleList,
   RulePreview,
   RiskBlockMutation,
+  RuntimeStatus,
   SystemHealth,
   SystemInfo,
   TokenGet,
@@ -48,10 +50,10 @@ type StatsRange = '1h' | '6h' | '24h'
 type StatsData = { range: StatsRange; series: Record<string, DashboardSeries> }
 
 const navItems: Array<{ id: Page; label: string; kicker: string; icon: typeof Activity }> = [
-  { id: 'overview', label: '总览监控', kicker: 'Monitoring', icon: LayoutDashboard },
-  { id: 'stats', label: '统计分析', kicker: 'Statistics', icon: BarChart3 },
-  { id: 'audit', label: '审计轨迹', kicker: 'Audit stream', icon: FileSearch },
-  { id: 'config', label: '配置管理', kicker: 'Draft & apply', icon: Settings2 },
+  { id: 'overview', label: '总览', kicker: '', icon: LayoutDashboard },
+  { id: 'stats', label: '统计', kicker: '', icon: BarChart3 },
+  { id: 'audit', label: '审计', kicker: '', icon: FileSearch },
+  { id: 'config', label: '配置', kicker: '', icon: Settings2 },
 ]
 
 function initialAuth(): AuthState {
@@ -76,6 +78,7 @@ function App() {
   const [statsRange, setStatsRange] = useState<StatsRange>('1h')
   const [stats, setStats] = useState<StatsData | null>(null)
   const [health, setHealth] = useState<SystemHealth | null>(null)
+  const [runtime, setRuntime] = useState<RuntimeStatus | null>(null)
   const [info, setInfo] = useState<SystemInfo | null>(null)
   const [rules, setRules] = useState<RuleList | null>(null)
   const [pending, setPending] = useState<PendingList | null>(null)
@@ -95,15 +98,17 @@ function App() {
   const loadOverview = useCallback(async (signal?: AbortSignal) => {
     setError('')
     try {
-      const [nextSummary, nextSeries, nextHealth, nextInfo] = await Promise.all([
+      const [nextSummary, nextSeries, nextHealth, nextRuntime, nextInfo] = await Promise.all([
         rpc<DashboardSummary>('dashboard.summary', {}, auth, signal),
         rpc<DashboardSeries>('dashboard.series', { metric: 'pow_denied_total', step: 300 }, auth, signal),
         rpc<SystemHealth>('system.health', {}, auth, signal),
+        rpc<RuntimeStatus>('runtime.status', {}, auth, signal),
         rpc<SystemInfo>('system.info', {}, auth, signal),
       ])
       setSummary(nextSummary)
       setSeries(nextSeries)
       setHealth(nextHealth)
+      setRuntime(nextRuntime)
       setInfo(nextInfo)
       setAuthRequired(false)
     } catch (reason) {
@@ -217,8 +222,8 @@ function App() {
         <div className="brand-lockup">
           <div className="brand-mark" aria-hidden="true"><ShieldCheck size={23} /></div>
           <div>
-            <strong>MIRRORS WAF</strong>
-            <span>CONTROL PLANE</span>
+            <strong>Mirrors WAF</strong>
+            <span>管理控制台</span>
           </div>
           <button className="icon-button mobile-close" aria-label="关闭导航" onClick={() => setMobileNav(false)}><X size={18} /></button>
         </div>
@@ -236,11 +241,6 @@ function App() {
           })}
         </nav>
         <div className="nav-spacer" />
-        <div className="sidebar-status">
-          <div className="status-dot"><span /> API GATEWAY</div>
-          <strong>{auth.mode === 'none' ? '未配置凭据' : '会话凭据已载入'}</strong>
-          <small>同源连接 · 内存会话</small>
-        </div>
         <div className="sidebar-footer"><span>build {shortCommit(info?.commit ?? '')}</span><span>v{info?.version ?? 'dev'}</span></div>
       </aside>
       {mobileNav && <button className="nav-scrim" aria-label="关闭导航" onClick={() => setMobileNav(false)} />}
@@ -249,28 +249,27 @@ function App() {
         <header className="top-bar">
           <div className="top-left">
             <button className="icon-button mobile-menu" aria-label="打开导航" onClick={() => setMobileNav(true)}><Menu size={20} /></button>
-            <div className="breadcrumbs"><span>CONTROL PLANE</span><ChevronRight size={14} /><strong>{navItems.find((item) => item.id === page)?.label}</strong></div>
+            <div className="breadcrumbs"><strong>{navItems.find((item) => item.id === page)?.label}</strong></div>
           </div>
           <div className="top-actions">
-            <div className="connection-pill"><span className={error ? 'warning' : 'online'} /> {error ? 'DEGRADED' : 'OPERATIONAL'}</div>
+            <div className="connection-pill"><span className={error ? 'warning' : 'online'} /> {error ? '连接异常' : '服务正常'}</div>
             <button className="icon-button" aria-label="刷新数据" onClick={() => void refresh()} disabled={refreshing}><RefreshCw size={17} className={refreshing ? 'spin' : ''} /></button>
-            <button className="operator-chip" onClick={auth.mode === 'none' ? () => setAuthRequired(true) : signOut} title={auth.mode === 'none' ? '配置凭据' : '清除当前凭据'}><span>OP</span><b>{auth.mode === 'none' ? 'CONNECT' : 'OPERATOR'}</b></button>
+            <button className="operator-chip" onClick={auth.mode === 'none' ? () => setAuthRequired(true) : signOut} title={auth.mode === 'none' ? '配置凭据' : '清除当前凭据'}><b>{auth.mode === 'none' ? '连接' : '已登录'}</b></button>
           </div>
         </header>
 
         <div className="content-wrap">
           <div className="page-heading">
             <div>
-              <div className="eyebrow"><span className="eyebrow-line" /> MIRRORS-WAF / ADMIN</div>
               <h1>{pageTitle(page)}</h1>
               <p>{pageDescription(page)}</p>
             </div>
-            <div className="heading-meta"><span>LOCAL TIME</span><strong>{new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date())}</strong></div>
+            <div className="heading-meta"><span>当前时间</span><strong>{new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date())}</strong></div>
           </div>
 
           {error && <div className="alert-banner" role="alert"><AlertTriangle size={18} /><div><strong>控制面连接异常</strong><span>{error}</span></div><button onClick={() => void refresh()}>重试</button></div>}
           {loading ? <LoadingState /> : <>
-            {page === 'overview' && <OverviewPage summary={summary} series={series} health={health} onNavigate={navigate} />}
+            {page === 'overview' && <OverviewPage summary={summary} series={series} health={health} runtime={runtime} auth={auth} onRuntimeChanged={(nextRuntime, message) => { setRuntime(nextRuntime); setToast(message) }} onNavigate={navigate} />}
             {page === 'stats' && <StatsPage stats={stats} range={statsRange} onRangeChange={setStatsRange} />}
             {page === 'rules' && <RulesPage rules={rules} auth={auth} onError={handleLoadError} />}
             {page === 'tokens' && <TokensPage auth={auth} onError={handleLoadError} />}
@@ -307,13 +306,13 @@ function LoadingState() {
   return <div className="loading-grid"><div className="skeleton hero-skeleton" /><div className="skeleton" /><div className="skeleton" /><div className="skeleton wide" /></div>
 }
 
-function OverviewPage({ summary, series, health, onNavigate }: { summary: DashboardSummary | null; series: DashboardSeries | null; health: SystemHealth | null; onNavigate: (page: Page) => void }) {
+function OverviewPage({ summary, series, health, runtime, auth, onRuntimeChanged, onNavigate }: { summary: DashboardSummary | null; series: DashboardSeries | null; health: SystemHealth | null; runtime: RuntimeStatus | null; auth: AuthState; onRuntimeChanged: (runtime: RuntimeStatus, message: string) => void; onNavigate: (page: Page) => void }) {
   const metrics = summary?.metrics
   const cards = [
-    { label: 'PoW VERIFICATIONS', value: formatNumber(metrics?.pow_verify_total ?? 0), sub: '进程累计校验', icon: Zap, accent: 'cyan' },
-    { label: 'ALLOWED', value: formatNumber(metrics?.pow_allowed_total ?? 0), sub: '通过验证请求', icon: ShieldCheck, accent: 'green' },
-    { label: 'DENIED', value: formatNumber(metrics?.pow_denied_total ?? 0), sub: '被拒绝请求', icon: LockKeyhole, accent: 'red' },
-    { label: 'ACTIVE SIGNATURES', value: formatNumber(metrics?.active_signatures ?? 0), sub: '当前使用记录', icon: KeyRound, accent: 'amber' },
+    { label: 'PoW 校验', value: formatNumber(metrics?.pow_verify_total ?? 0), sub: '进程累计', icon: Zap, accent: 'cyan' },
+    { label: '放行', value: formatNumber(metrics?.pow_allowed_total ?? 0), sub: '通过验证', icon: ShieldCheck, accent: 'green' },
+    { label: '拒绝', value: formatNumber(metrics?.pow_denied_total ?? 0), sub: '被拒绝', icon: LockKeyhole, accent: 'red' },
+    { label: '活跃签名', value: formatNumber(metrics?.active_signatures ?? 0), sub: '使用记录', icon: KeyRound, accent: 'amber' },
   ]
   return <>
     <section className="metric-grid" aria-label="核心指标">
@@ -321,25 +320,25 @@ function OverviewPage({ summary, series, health, onNavigate }: { summary: Dashbo
     </section>
     <section className="dashboard-grid">
       <div className="panel chart-panel">
-        <PanelHeader title="拒绝速率" kicker="PROMETHEUS / FIXED QUERY" action={<span className={`source-badge ${series?.available ? 'good' : 'muted'}`}><Activity size={13} /> {series?.available ? 'LIVE' : 'UNAVAILABLE'}</span>} />
+        <PanelHeader title="拒绝速率" kicker="固定指标查询" action={<span className={`source-badge ${series?.available ? 'good' : 'muted'}`}><Activity size={13} /> {series?.available ? '有数据' : '暂无数据'}</span>} />
         {series?.available && series.points.length > 0 ? <TrendChart points={series.points} /> : <EmptyState icon={BarChart3} title="暂无时序数据" description={series?.error ?? '配置 Prometheus 后启用固定指标查询。'} />}
       </div>
       <div className="panel health-panel">
-        <PanelHeader title="依赖健康" kicker="RUNTIME COMPONENTS" action={<span className={`source-badge ${health === null ? 'muted' : health.ok ? 'good' : 'danger'}`}><span className="tiny-dot" /> {health === null ? 'WAITING' : health.ok ? 'ALL CLEAR' : 'CHECK REQUIRED'}</span>} />
+        <PanelHeader title="依赖健康" kicker="运行时组件" action={<span className={`source-badge ${health === null ? 'muted' : health.ok ? 'good' : 'danger'}`}><span className="tiny-dot" /> {health === null ? '加载中' : health.ok ? '全部正常' : '需检查'}</span>} />
         <div className="health-list">{(health?.components ?? []).map((component) => <HealthRow key={component.name} {...component} />)}</div>
       </div>
     </section>
     <section className="dashboard-grid lower-grid">
       <div className="panel insight-panel">
-        <PanelHeader title="运行态势" kicker="OPERATOR NOTES" />
+        <PanelHeader title="运行态势" kicker="当前实例" />
         <div className="insight-list">
           <Insight icon={Gauge} title="风险决策总量" value={formatNumber(metrics?.risk_decision_total ?? 0)} detail="由风险引擎累计产生的决策" />
-          <Insight icon={Network} title="Pending 范围" value="INSTANCE" detail="当前状态只覆盖本后端进程" />
-          <Insight icon={ServerCog} title="控制面" value="PHASE 2" detail="支持受控的实例级 IP Block/Unblock" />
+          <Insight icon={Network} title="Pending 范围" value="本实例" detail="当前状态只覆盖本后端进程" />
+          <Insight icon={ServerCog} title="管理能力" value="已启用" detail="支持实例级 IP Block / Unblock" />
         </div>
       </div>
       <div className="panel quick-panel">
-        <PanelHeader title="快速入口" kicker="CONTROL SHORTCUTS" />
+        <PanelHeader title="快速入口" kicker="常用操作" />
         <div className="quick-grid">
           <QuickLink icon={BarChart3} title="打开统计" detail="查看固定指标趋势" onClick={() => onNavigate('stats')} />
           <QuickLink icon={FileSearch} title="审计轨迹" detail="检索管理操作事件" onClick={() => onNavigate('audit')} />
@@ -347,6 +346,7 @@ function OverviewPage({ summary, series, health, onNavigate }: { summary: Dashbo
         </div>
       </div>
     </section>
+    <RuntimeControls runtime={runtime} auth={auth} onChanged={onRuntimeChanged} />
   </>
 }
 
@@ -360,7 +360,7 @@ const statsMetricMeta = [
 function StatsPage({ stats, range, onRangeChange }: { stats: StatsData | null; range: StatsRange; onRangeChange: (range: StatsRange) => void }) {
   return <>
     <div className="panel stats-toolbar">
-      <div><span className="toolbar-kicker">FIXED PROMETHEUS QUERIES</span><strong>统计窗口</strong><small>后端只执行固定指标查询，不接受任意 PromQL。</small></div>
+      <div><span className="toolbar-kicker">固定指标</span><strong>统计窗口</strong><small>后端只执行固定指标查询，不接受任意 PromQL。</small></div>
       <div className="stats-range" role="group" aria-label="统计时间范围">
         {(['1h', '6h', '24h'] as StatsRange[]).map((value) => <button key={value} className={range === value ? 'is-active' : ''} onClick={() => onRangeChange(value)} aria-pressed={range === value}>{value}</button>)}
       </div>
@@ -540,6 +540,6 @@ function ConfigPage({ auth, onError, onToast, refreshNonce }: { auth: AuthState;
 
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}</label> }
 function EmptyState({ icon: Icon, title, description }: { icon: typeof Activity; title: string; description: string }) { return <div className="empty-state"><div className="empty-icon"><Icon size={22} /></div><strong>{title}</strong><p>{description}</p></div> }
-function AuthModal({ authForm, setAuthForm, onSubmit, onClose }: { authForm: { mode: 'token' | 'basic'; token: string; username: string; password: string }; setAuthForm: (value: { mode: 'token' | 'basic'; token: string; username: string; password: string }) => void; onSubmit: () => void; onClose: () => void }) { return <div className="modal-scrim"><section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button type="button" className="modal-close icon-button" aria-label="关闭" onClick={onClose}><X size={18} /></button><div className="auth-icon"><LockKeyhole size={22} /></div><span className="eyebrow">ADMIN API / AUTH</span><h2 id="auth-title">连接运维控制面</h2><p>凭据只保存在当前页面内存，不会写入浏览器存储。</p><div className="auth-tabs"><button type="button" className={authForm.mode === 'token' ? 'active' : ''} onClick={() => setAuthForm({ ...authForm, mode: 'token' })}>Bearer Token</button><button type="button" className={authForm.mode === 'basic' ? 'active' : ''} onClick={() => setAuthForm({ ...authForm, mode: 'basic' })}>Basic Auth</button></div><form onSubmit={(event) => { event.preventDefault(); onSubmit() }}>{authForm.mode === 'token' ? <><input className="visually-hidden" name="username" autoComplete="username" value="admin-token" readOnly tabIndex={-1} aria-hidden="true" /><Field label="ADMIN TOKEN"><input name="password" type="password" autoComplete="current-password" value={authForm.token} autoFocus onChange={(event) => setAuthForm({ ...authForm, token: event.target.value })} /></Field></> : <><Field label="USERNAME"><input autoComplete="username" value={authForm.username} onChange={(event) => setAuthForm({ ...authForm, username: event.target.value })} /></Field><Field label="PASSWORD"><input type="password" autoComplete="current-password" value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} /></Field></>}<button type="submit" className="primary-button full-button"><LockKeyhole size={16} /> 验证并连接</button></form></section></div> }
+function AuthModal({ authForm, setAuthForm, onSubmit, onClose }: { authForm: { mode: 'token' | 'basic'; token: string; username: string; password: string }; setAuthForm: (value: { mode: 'token' | 'basic'; token: string; username: string; password: string }) => void; onSubmit: () => void; onClose: () => void }) { return <div className="modal-scrim"><section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button type="button" className="modal-close icon-button" aria-label="关闭" onClick={onClose}><X size={18} /></button><div className="auth-icon"><LockKeyhole size={22} /></div><h2 id="auth-title">连接运维控制面</h2><p>凭据只保存在当前页面内存，不会写入浏览器存储。</p><div className="auth-tabs"><button type="button" className={authForm.mode === 'token' ? 'active' : ''} onClick={() => setAuthForm({ ...authForm, mode: 'token' })}>Bearer Token</button><button type="button" className={authForm.mode === 'basic' ? 'active' : ''} onClick={() => setAuthForm({ ...authForm, mode: 'basic' })}>Basic Auth</button></div><form onSubmit={(event) => { event.preventDefault(); onSubmit() }}>{authForm.mode === 'token' ? <><input className="visually-hidden" name="username" autoComplete="username" value="admin-token" readOnly tabIndex={-1} aria-hidden="true" /><Field label="管理 Token"><input name="password" type="password" autoComplete="current-password" value={authForm.token} autoFocus onChange={(event) => setAuthForm({ ...authForm, token: event.target.value })} /></Field></> : <><Field label="用户名"><input autoComplete="username" value={authForm.username} onChange={(event) => setAuthForm({ ...authForm, username: event.target.value })} /></Field><Field label="密码"><input type="password" autoComplete="current-password" value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} /></Field></>}<button type="submit" className="primary-button full-button"><LockKeyhole size={16} /> 验证并连接</button></form></section></div> }
 
 export default App

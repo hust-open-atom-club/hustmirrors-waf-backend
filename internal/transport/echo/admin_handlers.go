@@ -72,6 +72,29 @@ func (s *Server) adminRulePreview(c echov4.Context) error {
 	return s.writeAdminResponse(c, r, err, "rule.preview")
 }
 
+func (s *Server) adminRuntimeStatus(c echov4.Context) error {
+	r, err := s.adminSvc.RuntimeStatus(c.Request().Context(), admin.RuntimeStatusRequest{})
+	return s.writeAdminResponse(c, r, err, "runtime.status")
+}
+
+func (s *Server) adminRuntimeOverrideSet(c echov4.Context) error {
+	var req admin.RuntimeOverrideSetRequest
+	if err := c.Bind(&req); err != nil {
+		return s.writeAdminError(c, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body", "runtime.override.set")
+	}
+	r, err := s.adminSvc.RuntimeOverrideSet(c.Request().Context(), req)
+	return s.writeAdminResponse(c, r, err, "runtime.override.set")
+}
+
+func (s *Server) adminRuntimeOverrideClear(c echov4.Context) error {
+	var req admin.RuntimeOverrideClearRequest
+	if err := c.Bind(&req); err != nil {
+		return s.writeAdminError(c, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body", "runtime.override.clear")
+	}
+	r, err := s.adminSvc.RuntimeOverrideClear(c.Request().Context(), req)
+	return s.writeAdminResponse(c, r, err, "runtime.override.clear")
+}
+
 func (s *Server) adminRuleReload(c echov4.Context) error {
 	var req admin.RuleReloadRequest
 	if err := c.Bind(&req); err != nil {
