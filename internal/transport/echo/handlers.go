@@ -2,6 +2,7 @@ package echo
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	echov4 "github.com/labstack/echo/v4"
@@ -41,6 +42,11 @@ func writeAuthResult(c echov4.Context, res auth.AuthResult) {
 	}
 	if res.LimitRate != "" {
 		h.Set("X-Pow-Limit-Rate", res.LimitRate)
+		// Nginx's `limit_rate $var` requires a plain byte count; a value like
+		// "512k" is treated as invalid and silently means "no limit". Emit the
+		// numeric form in a separate header for the proxy to consume; the
+		// human-readable form stays for logs and debugging.
+		h.Set("X-Pow-Limit-Rate-Bytes", limitRateBytes(res.LimitRate))
 	}
 	if res.Decision != "" {
 		h.Set("X-Pow-Decision", res.Decision)
@@ -141,6 +147,34 @@ func (s *Server) whoami(c echov4.Context) error {
 
 func (s *Server) readyz(c echov4.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "storage": "ok"})
+}
+
+// limitRateBytes converts a human rate string like "512k", "2m", "1g" or "0"
+// into a plain byte count string. Unparseable input maps to "0" (no limit),
+// matching how the risk engine treats unset rates.
+func limitRateBytes(rate string) string {
+	if rate == "" {
+		return "0"
+	}
+	rate = strings.ToLower(strings.TrimSpace(rate))
+	multiplier := int64(1)
+	numeric := rate
+	switch rate[len(rate)-1] {
+	case 'k':
+		multiplier = 1024
+		numeric = rate[:len(rate)-1]
+	case 'm':
+		multiplier = 1024 * 1024
+		numeric = rate[:len(rate)-1]
+	case 'g':
+		multiplier = 1024 * 1024 * 1024
+		numeric = rate[:len(rate)-1]
+	}
+	value, err := strconv.ParseInt(numeric, 10, 64)
+	if err != nil || value < 0 {
+		return "0"
+	}
+	return strconv.FormatInt(value*multiplier, 10)
 }
 
 func itoa(n int) string {

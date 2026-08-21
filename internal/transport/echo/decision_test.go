@@ -30,6 +30,7 @@ func TestWriteAuthResult_DecisionHeader(t *testing.T) {
 		c := s.Echo().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
 		writeAuthResult(c, auth.AuthResult{Allowed: true, HTTPStatus: 200, Reason: "metadata_full_speed", LimitRate: "512k", Decision: "unverified_slow"})
 		assert.Equal(t, "512k", rec.Header().Get("X-Pow-Limit-Rate"))
+		assert.Equal(t, "524288", rec.Header().Get("X-Pow-Limit-Rate-Bytes"))
 		assert.Equal(t, "unverified_slow", rec.Header().Get("X-Pow-Decision"))
 	})
 
