@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"time"
 	"errors"
 
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/clock"
@@ -28,10 +27,6 @@ type Service struct {
 
 	ipBoundOpts pow.ValidatorOptions
 	genericOpts pow.ValidatorOptions
-
-	// overrides holds process-local emergency switch overrides
-	// (bypass_all / dry_run). Never persisted; cleared on restart.
-	overrides *overrideRegistry
 
 	// allowedSalts is derived from cfg.Pow.PublicSalt + AllowedPreviousSalts.
 	allowedSalts []string
@@ -105,7 +100,6 @@ func New(opts Options) (*Service, error) {
 		riskEngine:     opts.RiskEngine,
 		counterReg:     opts.CounterReg,
 		pendingBlocker: opts.PendingBlocker,
-		overrides:      newOverrideRegistry(),
 	}
 
 	s.allowedSalts = append(s.allowedSalts, opts.Config.Pow.AllowedPreviousSalts...)
@@ -438,34 +432,12 @@ func (s *Service) maybeDryRun(_ context.Context, res AuthResult) AuthResult {
 	return res
 }
 
-// bypassAllEffective returns the runtime-effective bypass_all: an active
-// override wins over the config file value, and expires without a restart.
+// bypassAllEffective reports whether bypass_all is enabled in the config.
 func (s *Service) bypassAllEffective() bool {
-	if st := s.overrides.Lookup(OverrideBypassAll, s.clock.Now()); st != nil {
-		return st.Value
-	}
 	return s.cfg.Pow.BypassAll
 }
 
-// dryRunEffective returns the runtime-effective dry_run.
+// dryRunEffective reports whether dry_run is enabled in the config.
 func (s *Service) dryRunEffective() bool {
-	if st := s.overrides.Lookup(OverrideDryRun, s.clock.Now()); st != nil {
-		return st.Value
-	}
 	return s.cfg.Pow.DryRun
-}
-
-// SetOverride installs a temporary runtime override for an emergency switch.
-func (s *Service) SetOverride(key OverrideKey, value bool, reason string, ttl time.Duration) {
-	s.overrides.Set(key, value, reason, ttl, s.clock.Now())
-}
-
-// ClearOverride removes an override early. Returns whether one was active.
-func (s *Service) ClearOverride(key OverrideKey) bool {
-	return s.overrides.Clear(key)
-}
-
-// OverrideSnapshot lists active overrides (already expiry-filtered).
-func (s *Service) OverrideSnapshot() []OverrideState {
-	return s.overrides.Snapshot(s.clock.Now())
 }

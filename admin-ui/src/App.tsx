@@ -8,17 +8,14 @@ import {
   Check,
   ChevronRight,
   CircleHelp,
-  FileCode2,
   FileSearch,
   Gauge,
   KeyRound,
   LayoutDashboard,
   LockKeyhole,
   Menu,
-  Network,
   RefreshCw,
   Search,
-  ServerCog,
   Settings2,
   ShieldCheck,
   TerminalSquare,
@@ -28,7 +25,6 @@ import {
 } from 'lucide-react'
 import { AuthRequiredError, rpc } from './api'
 import ConfigManagement from './components/ConfigManagement'
-import RuntimeControls from './components/RuntimeControls'
 import type {
   AuditList,
   AuthState,
@@ -38,7 +34,6 @@ import type {
   RuleList,
   RulePreview,
   RiskBlockMutation,
-  RuntimeStatus,
   SystemHealth,
   SystemInfo,
   TokenGet,
@@ -78,7 +73,6 @@ function App() {
   const [statsRange, setStatsRange] = useState<StatsRange>('1h')
   const [stats, setStats] = useState<StatsData | null>(null)
   const [health, setHealth] = useState<SystemHealth | null>(null)
-  const [runtime, setRuntime] = useState<RuntimeStatus | null>(null)
   const [info, setInfo] = useState<SystemInfo | null>(null)
   const [rules, setRules] = useState<RuleList | null>(null)
   const [pending, setPending] = useState<PendingList | null>(null)
@@ -98,17 +92,15 @@ function App() {
   const loadOverview = useCallback(async (signal?: AbortSignal) => {
     setError('')
     try {
-      const [nextSummary, nextSeries, nextHealth, nextRuntime, nextInfo] = await Promise.all([
+      const [nextSummary, nextSeries, nextHealth, nextInfo] = await Promise.all([
         rpc<DashboardSummary>('dashboard.summary', {}, auth, signal),
         rpc<DashboardSeries>('dashboard.series', { metric: 'pow_denied_total', step: 300 }, auth, signal),
         rpc<SystemHealth>('system.health', {}, auth, signal),
-        rpc<RuntimeStatus>('runtime.status', {}, auth, signal),
         rpc<SystemInfo>('system.info', {}, auth, signal),
       ])
       setSummary(nextSummary)
       setSeries(nextSeries)
       setHealth(nextHealth)
-      setRuntime(nextRuntime)
       setInfo(nextInfo)
       setAuthRequired(false)
     } catch (reason) {
@@ -156,6 +148,15 @@ function App() {
   useEffect(() => {
     window.location.hash = `/${page}`
   }, [page])
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const value = window.location.hash.replace('#/', '') as Page
+      setPage(navItems.some((item) => item.id === value) ? value : 'overview')
+    }
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -260,16 +261,12 @@ function App() {
 
         <div className="content-wrap">
           <div className="page-heading">
-            <div>
-              <h1>{pageTitle(page)}</h1>
-              <p>{pageDescription(page)}</p>
-            </div>
-            <div className="heading-meta"><span>当前时间</span><strong>{new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date())}</strong></div>
+            <h1>{pageTitle(page)}</h1>
           </div>
 
           {error && <div className="alert-banner" role="alert"><AlertTriangle size={18} /><div><strong>控制面连接异常</strong><span>{error}</span></div><button onClick={() => void refresh()}>重试</button></div>}
           {loading ? <LoadingState /> : <>
-            {page === 'overview' && <OverviewPage summary={summary} series={series} health={health} runtime={runtime} auth={auth} onRuntimeChanged={(nextRuntime, message) => { setRuntime(nextRuntime); setToast(message) }} onNavigate={navigate} />}
+            {page === 'overview' && <OverviewPage summary={summary} series={series} health={health} />}
             {page === 'stats' && <StatsPage stats={stats} range={statsRange} onRangeChange={setStatsRange} />}
             {page === 'rules' && <RulesPage rules={rules} auth={auth} onError={handleLoadError} />}
             {page === 'tokens' && <TokensPage auth={auth} onError={handleLoadError} />}
@@ -290,23 +287,11 @@ function pageTitle(page: Page) {
   return { overview: '总览监控', stats: '统计分析', rules: '规则链', tokens: 'Token 检索', pending: 'Pending 守卫', audit: '审计轨迹', config: '配置管理' }[page]
 }
 
-function pageDescription(page: Page) {
-  return {
-    overview: '查看服务健康、关键开关、依赖状态和当前风险信号。',
-    stats: '从固定 Prometheus 指标观察验证、放行、拒绝和风险决策趋势。',
-    rules: '以只读方式检查当前风险链，并对请求上下文进行安全预览。',
-    tokens: '按 sign ID 查询使用记录；敏感字段已在服务端剥离。',
-    pending: '查看当前实例的 Pending 状态，并执行受审计的人工 IP Block/Unblock。',
-    audit: '检索谁在什么时候对控制面执行了什么操作。',
-    config: '使用 CAS 草稿、校验与差异预览安全管理配置，并查看或回滚历史修订。',
-  }[page]
-}
-
 function LoadingState() {
   return <div className="loading-grid"><div className="skeleton hero-skeleton" /><div className="skeleton" /><div className="skeleton" /><div className="skeleton wide" /></div>
 }
 
-function OverviewPage({ summary, series, health, runtime, auth, onRuntimeChanged, onNavigate }: { summary: DashboardSummary | null; series: DashboardSeries | null; health: SystemHealth | null; runtime: RuntimeStatus | null; auth: AuthState; onRuntimeChanged: (runtime: RuntimeStatus, message: string) => void; onNavigate: (page: Page) => void }) {
+function OverviewPage({ summary, series, health }: { summary: DashboardSummary | null; series: DashboardSeries | null; health: SystemHealth | null }) {
   const metrics = summary?.metrics
   const cards = [
     { label: 'PoW 校验', value: formatNumber(metrics?.pow_verify_total ?? 0), sub: '进程累计', icon: Zap, accent: 'cyan' },
@@ -320,33 +305,14 @@ function OverviewPage({ summary, series, health, runtime, auth, onRuntimeChanged
     </section>
     <section className="dashboard-grid">
       <div className="panel chart-panel">
-        <PanelHeader title="拒绝速率" kicker="固定指标查询" action={<span className={`source-badge ${series?.available ? 'good' : 'muted'}`}><Activity size={13} /> {series?.available ? '有数据' : '暂无数据'}</span>} />
-        {series?.available && series.points.length > 0 ? <TrendChart points={series.points} /> : <EmptyState icon={BarChart3} title="暂无时序数据" description={series?.error ?? '配置 Prometheus 后启用固定指标查询。'} />}
+        <PanelHeader title="拒绝速率" action={<span className={`source-badge ${series?.available ? 'good' : 'muted'}`}><Activity size={13} /> {series?.available ? '有数据' : '暂无数据'}</span>} />
+        {series?.available && series.points.length > 0 ? <TrendChart points={series.points} /> : <EmptyState icon={BarChart3} title="暂无时序数据" description={series?.error ?? '未配置 Prometheus。'} />}
       </div>
       <div className="panel health-panel">
-        <PanelHeader title="依赖健康" kicker="运行时组件" action={<span className={`source-badge ${health === null ? 'muted' : health.ok ? 'good' : 'danger'}`}><span className="tiny-dot" /> {health === null ? '加载中' : health.ok ? '全部正常' : '需检查'}</span>} />
+        <PanelHeader title="依赖健康" action={<span className={`source-badge ${health === null ? 'muted' : health.ok ? 'good' : 'danger'}`}><span className="tiny-dot" /> {health === null ? '加载中' : health.ok ? '全部正常' : '需检查'}</span>} />
         <div className="health-list">{(health?.components ?? []).map((component) => <HealthRow key={component.name} {...component} />)}</div>
       </div>
     </section>
-    <section className="dashboard-grid lower-grid">
-      <div className="panel insight-panel">
-        <PanelHeader title="运行态势" kicker="当前实例" />
-        <div className="insight-list">
-          <Insight icon={Gauge} title="风险决策总量" value={formatNumber(metrics?.risk_decision_total ?? 0)} detail="由风险引擎累计产生的决策" />
-          <Insight icon={Network} title="Pending 范围" value="本实例" detail="当前状态只覆盖本后端进程" />
-          <Insight icon={ServerCog} title="管理能力" value="已启用" detail="支持实例级 IP Block / Unblock" />
-        </div>
-      </div>
-      <div className="panel quick-panel">
-        <PanelHeader title="快速入口" kicker="常用操作" />
-        <div className="quick-grid">
-          <QuickLink icon={BarChart3} title="打开统计" detail="查看固定指标趋势" onClick={() => onNavigate('stats')} />
-          <QuickLink icon={FileSearch} title="审计轨迹" detail="检索管理操作事件" onClick={() => onNavigate('audit')} />
-          <QuickLink icon={FileCode2} title="配置中心" detail="校验和审查配置版本" onClick={() => onNavigate('config')} />
-        </div>
-      </div>
-    </section>
-    <RuntimeControls runtime={runtime} auth={auth} onChanged={onRuntimeChanged} />
   </>
 }
 
@@ -360,7 +326,7 @@ const statsMetricMeta = [
 function StatsPage({ stats, range, onRangeChange }: { stats: StatsData | null; range: StatsRange; onRangeChange: (range: StatsRange) => void }) {
   return <>
     <div className="panel stats-toolbar">
-      <div><span className="toolbar-kicker">固定指标</span><strong>统计窗口</strong><small>后端只执行固定指标查询，不接受任意 PromQL。</small></div>
+      <div><strong>统计窗口</strong><small>仅支持固定指标查询。</small></div>
       <div className="stats-range" role="group" aria-label="统计时间范围">
         {(['1h', '6h', '24h'] as StatsRange[]).map((value) => <button key={value} className={range === value ? 'is-active' : ''} onClick={() => onRangeChange(value)} aria-pressed={range === value}>{value}</button>)}
       </div>
@@ -382,7 +348,7 @@ function StatsPage({ stats, range, onRangeChange }: { stats: StatsData | null; r
           : <EmptyState icon={BarChart3} title="暂无时序数据" description={stats?.series[metric.key]?.error ?? '配置 Prometheus 后启用固定指标查询。'} />}
       </div>)}
     </section>
-    <div className="stats-footnote" role="note"><Activity size={15} /><span>展示的是 Prometheus 速率查询结果；进程累计计数和依赖健康状态仍可在总览监控查看。</span></div>
+    <div className="stats-footnote" role="note"><Activity size={15} /><span>速率为 Prometheus 查询结果；累计计数见总览。</span></div>
   </>
 }
 
@@ -391,24 +357,16 @@ function latestPoint(series?: DashboardSeries) {
 }
 
 function MetricCard({ label, value, sub, icon: Icon, accent }: { label: string; value: string; sub: string; icon: typeof Activity; accent: string }) {
-  return <article className={`metric-card accent-${accent}`}><div className="metric-top"><span>{label}</span><Icon size={18} /></div><strong>{value}</strong><small>{sub}</small><div className="metric-spark"><span /><span /><span /><span /><span /><span /><span /></div></article>
+  return <article className={`metric-card accent-${accent}`}><div className="metric-top"><span>{label}</span><Icon size={18} /></div><strong>{value}</strong><small>{sub}</small></article>
 }
 
-function PanelHeader({ title, kicker, action }: { title: string; kicker: string; action?: ReactNode }) {
-  return <div className="panel-header"><div><span>{kicker}</span><h2>{title}</h2></div>{action}</div>
+function PanelHeader({ title, kicker, action }: { title: string; kicker?: string; action?: ReactNode }) {
+  return <div className="panel-header"><div>{kicker && <span>{kicker}</span>}<h2>{title}</h2></div>{action}</div>
 }
 
 function HealthRow({ name, status, detail, latency_ms }: { name: string; status: string; detail?: string; latency_ms?: number }) {
   const good = status === 'ok' || status === 'configured'
   return <div className="health-row"><div className={`health-icon ${good ? 'good' : status === 'disabled' ? 'muted' : 'bad'}`}>{good ? <Check size={14} /> : status === 'disabled' ? <CircleHelp size={14} /> : <AlertTriangle size={14} />}</div><div className="health-copy"><strong>{name.replaceAll('_', ' ')}</strong><small>{detail ?? status}</small></div><span className="health-latency">{latency_ms ? `${latency_ms}ms` : status.toUpperCase()}</span></div>
-}
-
-function Insight({ icon: Icon, title, value, detail }: { icon: typeof Activity; title: string; value: string; detail: string }) {
-  return <div className="insight-row"><div className="insight-icon"><Icon size={17} /></div><div><strong>{title}</strong><small>{detail}</small></div><b>{value}</b></div>
-}
-
-function QuickLink({ icon: Icon, title, detail, onClick }: { icon: typeof Activity; title: string; detail: string; onClick: () => void }) {
-  return <button className="quick-link" onClick={onClick}><div className="quick-icon"><Icon size={18} /></div><span><strong>{title}</strong><small>{detail}</small></span><ChevronRight size={16} /></button>
 }
 
 function TrendChart({ points, label = '拒绝速率', chartID = 'trend-chart' }: { points: Array<{ timestamp: number; value: number }>; label?: string; chartID?: string }) {
@@ -424,7 +382,7 @@ function TrendChart({ points, label = '拒绝速率', chartID = 'trend-chart' }:
     return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
   }).join(' ')
   const fillID = `${chartID}-fill`
-  return <div className="chart-wrap"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${label}趋势，共 ${points.length} 个点`}><defs><linearGradient id={fillID} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#4ee6d0" stopOpacity=".22" /><stop offset="100%" stopColor="#4ee6d0" stopOpacity="0" /></linearGradient></defs><line x1="24" x2="696" y1="44" y2="44" className="chart-gridline" /><line x1="24" x2="696" y1="110" y2="110" className="chart-gridline" /><line x1="24" x2="696" y1="176" y2="176" className="chart-gridline" /><path d={`${path} L 696 196 L 24 196 Z`} fill={`url(#${fillID})`} /><path d={path} className="chart-line" fill="none" /></svg><div className="chart-axis"><span>{formatDate(points[0]?.timestamp)}</span><span>{formatDate(points.at(-1)?.timestamp)}</span></div><p className="chart-summary">服务端固定查询 · {label} · 可通过 Prometheus 配置启用</p></div>
+  return <div className="chart-wrap"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${label}趋势，共 ${points.length} 个点`}><defs><linearGradient id={fillID} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#4ee6d0" stopOpacity=".22" /><stop offset="100%" stopColor="#4ee6d0" stopOpacity="0" /></linearGradient></defs><line x1="24" x2="696" y1="44" y2="44" className="chart-gridline" /><line x1="24" x2="696" y1="110" y2="110" className="chart-gridline" /><line x1="24" x2="696" y1="176" y2="176" className="chart-gridline" /><path d={`${path} L 696 196 L 24 196 Z`} fill={`url(#${fillID})`} /><path d={path} className="chart-line" fill="none" /></svg><div className="chart-axis"><span>{formatDate(points[0]?.timestamp)}</span><span>{formatDate(points.at(-1)?.timestamp)}</span></div></div>
 }
 
 function RulesPage({ rules, auth, onError }: { rules: RuleList | null; auth: AuthState; onError: (reason: unknown) => void }) {

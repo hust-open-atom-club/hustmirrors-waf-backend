@@ -39,3 +39,9 @@ admin-ui/*.tsbuildinfo
 # Docker deployment secrets
 deploy/docker/secrets/*
 !deploy/docker/secrets/.gitkeep
+
+# Local build output
+bin/
+
+# Verification screenshots (repo root)
+/*.png

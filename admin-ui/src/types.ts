@@ -50,28 +50,6 @@ export interface SystemHealth {
   components: SourceStatus[]
 }
 
-export interface RuntimeSwitch {
-  key: 'bypass_all' | 'dry_run'
-  config_value: boolean
-  active_value: boolean
-  overridden: boolean
-  reason?: string
-  max_ttl_seconds: number
-  description: string
-}
-
-export interface RuntimeOverride {
-  key: 'bypass_all' | 'dry_run'
-  value: boolean
-  reason: string
-  expires_at: string
-}
-
-export interface RuntimeStatus {
-  switches: RuntimeSwitch[]
-  overrides: RuntimeOverride[]
-}
-
 export interface Decision {
   target: string
   status_code: number

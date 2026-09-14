@@ -55,9 +55,6 @@ func (s *Server) registerAdminRoutes() {
 	api.POST("/risk.blocks.add", s.adminRiskBlocksAdd)
 	api.POST("/risk.blocks.unblock", s.adminRiskBlocksUnblock)
 	api.POST("/audit.list", s.adminAuditList)
-	api.POST("/runtime.status", s.adminRuntimeStatus)
-	api.POST("/runtime.override.set", s.adminRuntimeOverrideSet)
-	api.POST("/runtime.override.clear", s.adminRuntimeOverrideClear)
 	api.POST("/audit.search", s.adminAuditSearch)
 
 	// The SPA shell is protected by the network allow-list only. API calls

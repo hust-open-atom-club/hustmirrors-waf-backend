@@ -1,7 +1,5 @@
 package admin
 
-import "time"
-
 type StandardResponse struct {
 	OK        bool        `json:"ok"`
 	Code      string      `json:"code"`
@@ -400,41 +398,4 @@ type AuditEventDTO struct {
 	RestartRequired bool   `json:"restart_required,omitempty"`
 	OK              bool   `json:"ok"`
 	Detail          string `json:"detail,omitempty"`
-}
-
-// Runtime override (emergency switch) DTOs.
-
-type RuntimeStatusRequest struct{}
-
-type RuntimeSwitchDTO struct {
-	Key           string `json:"key"`
-	ConfigValue   bool   `json:"config_value"`
-	ActiveValue   bool   `json:"active_value"`
-	Overridden    bool   `json:"overridden"`
-	Reason        string `json:"reason,omitempty"`
-	MaxTTLSeconds int    `json:"max_ttl_seconds"`
-	Description   string `json:"description"`
-}
-
-type RuntimeOverrideDTO struct {
-	Key       string    `json:"key"`
-	Value     bool      `json:"value"`
-	Reason    string    `json:"reason"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
-
-type RuntimeStatusResponse struct {
-	Switches  []RuntimeSwitchDTO  `json:"switches"`
-	Overrides []RuntimeOverrideDTO `json:"overrides"`
-}
-
-type RuntimeOverrideSetRequest struct {
-	Key        string `json:"key"`
-	Value      bool   `json:"value"`
-	Reason     string `json:"reason"`
-	TTLSeconds int    `json:"ttl_seconds"`
-}
-
-type RuntimeOverrideClearRequest struct {
-	Key string `json:"key"`
 }
