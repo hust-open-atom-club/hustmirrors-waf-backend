@@ -13,12 +13,12 @@ import (
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/risk"
 )
 
-func blockAdminService(t *testing.T, authType string) (*Service, *risk.IPPendingBlocker) {
+func blockAdminService(t *testing.T, token string) (*Service, *risk.IPPendingBlocker) {
 	t.Helper()
 	cfg := &config.Config{}
 	config.ApplyDefaults(cfg)
 	cfg.Admin.Enabled = true
-	cfg.Admin.Auth.Type = authType
+	cfg.Admin.Auth.Token = token
 	cfg.Admin.MutationsEnabled = true
 	cfg.Admin.IPBlock.Enabled = true
 	cfg.Admin.IPBlock.DefaultTTL = time.Hour
@@ -31,7 +31,7 @@ func blockAdminService(t *testing.T, authType string) (*Service, *risk.IPPending
 }
 
 func TestService_RiskBlocksAddAndUnblock(t *testing.T) {
-	svc, _ := blockAdminService(t, "basic")
+	svc, _ := blockAdminService(t, "t")
 
 	added, err := svc.RiskBlocksAdd(context.Background(), RiskBlockAddRequest{
 		IP: "::ffff:192.0.2.50", ConfirmIP: "192.0.2.50", Reason: "suspicious downloader", Actor: "ops",
@@ -74,7 +74,7 @@ func TestService_RiskBlocksRejectsUnsafeRequests(t *testing.T) {
 		{name: "negative ttl", req: RiskBlockAddRequest{IP: "192.0.2.1", ConfirmIP: "192.0.2.1", TTLSeconds: -1, Reason: "x", Actor: "ops"}},
 		{name: "ttl too large", req: RiskBlockAddRequest{IP: "192.0.2.1", ConfirmIP: "192.0.2.1", TTLSeconds: int64((25 * time.Hour) / time.Second), Reason: "x", Actor: "ops"}},
 	}
-	svc, _ := blockAdminService(t, "token")
+	svc, _ := blockAdminService(t, "t")
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := svc.RiskBlocksAdd(context.Background(), tt.req)
@@ -86,7 +86,7 @@ func TestService_RiskBlocksRejectsUnsafeRequests(t *testing.T) {
 }
 
 func TestService_RiskBlocksRequiresExplicitMutationAuth(t *testing.T) {
-	svc, _ := blockAdminService(t, "none")
+	svc, _ := blockAdminService(t, "")
 	_, err := svc.RiskBlocksAdd(context.Background(), RiskBlockAddRequest{
 		IP: "192.0.2.1", ConfirmIP: "192.0.2.1", Reason: "x", Actor: "anonymous",
 	})

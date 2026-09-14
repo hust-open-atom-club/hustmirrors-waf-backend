@@ -76,7 +76,7 @@ func (s *Service) checkIPBlockMutationAccess() error {
 	if s.cfg == nil || !s.cfg.Admin.MutationsEnabled {
 		return MutationsDisabledError()
 	}
-	if s.cfg.Admin.Auth.Type != "token" && s.cfg.Admin.Auth.Type != "basic" {
+	if s.cfg.Admin.Auth.Token == "" {
 		return MutationAuthRequiredError()
 	}
 	if !s.cfg.Admin.IPBlock.Enabled {

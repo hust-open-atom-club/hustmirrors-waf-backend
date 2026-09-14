@@ -84,44 +84,22 @@ func timeoutMiddleware(read, write time.Duration) echov4.MiddlewareFunc {
 // bytes of a guess were correct, which turns an offline brute force into a
 // far cheaper byte-at-a-time search.
 func adminAuthMiddleware(cfg config.AdminConfig) echov4.MiddlewareFunc {
-	switch cfg.Auth.Type {
-	case "token":
-		expected := cfg.Auth.Token
-		return func(next echov4.HandlerFunc) echov4.HandlerFunc {
-			return func(c echov4.Context) error {
-				if expected == "" {
-					return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "admin token not configured"})
-				}
-				got := bearerToken(c.Request().Header.Get("Authorization"))
-				if got == "" || !secureEqual(got, expected) {
-					return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid admin token"})
-				}
-				return next(c)
-			}
-		}
-	case "basic":
-		expectedUser, expectedPass := cfg.Auth.Username, cfg.Auth.Password
-		return func(next echov4.HandlerFunc) echov4.HandlerFunc {
-			return func(c echov4.Context) error {
-				u, p, ok := c.Request().BasicAuth()
-				// Both comparisons run unconditionally: short-circuiting on
-				// the username would reveal whether it exists.
-				userOK := secureEqual(u, expectedUser)
-				passOK := secureEqual(p, expectedPass)
-				if !ok || !userOK || !passOK {
-					c.Response().Header().Set("WWW-Authenticate", `Basic realm="mirrors-waf-admin"`)
-					return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
-				}
-				return next(c)
-			}
-		}
-	case "none", "":
-		// Reachable only when the operator wrote auth.type: none, or left
-		// admin disabled. Config validation rejects an enabled admin API
-		// without explicit auth, so this is not a silent open door.
+	expected := cfg.Auth.Token
+	if expected == "" {
+		// Unauthenticated admin API. Config validation rejects this unless
+		// the listener is loopback or CIDR allow-listed, so this is not a
+		// silent open door.
 		return func(next echov4.HandlerFunc) echov4.HandlerFunc { return next }
 	}
-	return func(next echov4.HandlerFunc) echov4.HandlerFunc { return next }
+	return func(next echov4.HandlerFunc) echov4.HandlerFunc {
+		return func(c echov4.Context) error {
+			got := bearerToken(c.Request().Header.Get("Authorization"))
+			if got == "" || !secureEqual(got, expected) {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid admin token"})
+			}
+			return next(c)
+		}
+	}
 }
 
 // secureEqual compares two secrets in constant time with respect to their

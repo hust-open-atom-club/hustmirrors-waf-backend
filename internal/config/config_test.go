@@ -104,12 +104,12 @@ func TestValidate_AdminTokenRequired(t *testing.T) {
 	applyDefaults(c)
 	c.Pow.Modes.IPBound.Enabled = true
 	c.Admin.Enabled = true
-	c.Admin.Auth.Type = "token"
+	c.Admin.Listen = "0.0.0.0:8081"
 	c.Admin.Auth.TokenFile = ""
 	c.Admin.Auth.Token = ""
 	err := Validate(c)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "admin.auth.token_file or admin.auth.token is required")
+	assert.Contains(t, err.Error(), "admin.auth requires a token_file/token")
 }
 
 func TestValidate_AdminBadCIDR(t *testing.T) {
@@ -117,7 +117,7 @@ func TestValidate_AdminBadCIDR(t *testing.T) {
 	applyDefaults(c)
 	c.Pow.Modes.IPBound.Enabled = true
 	c.Admin.Enabled = true
-	c.Admin.Auth.Type = "none"
+	c.Admin.Listen = "127.0.0.1:8081"
 	c.Admin.AllowCIDRs = []string{"not-a-cidr"}
 	err := Validate(c)
 	require.Error(t, err)
@@ -275,32 +275,29 @@ func TestApplyDefaults_CleanupCanBeExplicitlyDisabled(t *testing.T) {
 	assert.False(t, *c.Cleanup.Enabled, "an explicit false must be preserved")
 }
 
-// TestValidate_AdminAuthMustBeExplicit covers a config that silently
-// exposed the admin API. auth.type shares a switch arm with "none", so an
-// omitted key produced a pass-through middleware: rule.preview and
-// config.validate were reachable with no credentials at all.
-func TestValidate_AdminAuthMustBeExplicit(t *testing.T) {
+// TestValidate_AdminUnauthenticatedRequiresConfinedListener covers a config
+// that silently exposed the admin API: no token configured means
+// unauthenticated, which is only defensible on a confined listener.
+func TestValidate_AdminUnauthenticatedRequiresConfinedListener(t *testing.T) {
 	c := &Config{}
 	applyDefaults(c)
 	c.Pow.Modes.IPBound.Enabled = true
 	c.Admin.Enabled = true
 	c.Admin.Listen = "0.0.0.0:8081"
-	c.Admin.Auth.Type = "" // operator omitted it
 
 	err := Validate(c)
-	require.Error(t, err, "an enabled admin API with no auth.type must be rejected")
-	assert.Contains(t, err.Error(), "admin.auth.type must be set")
+	require.Error(t, err, "an enabled admin API with no token on a public bind must be rejected")
+	assert.Contains(t, err.Error(), "admin.auth requires a token_file/token")
 }
 
-// TestValidate_AdminNoneRequiresConfinedListener allows auth.type=none
-// only where it is defensible: a loopback bind or an explicit allow-list.
-func TestValidate_AdminNoneRequiresConfinedListener(t *testing.T) {
+// TestValidate_AdminNoTokenOnLoopbackIsAllowed: a loopback bind may run
+// unauthenticated; an explicit allow-list also works.
+func TestValidate_AdminNoTokenOnConfinedListener(t *testing.T) {
 	base := func() *Config {
 		c := &Config{}
 		applyDefaults(c)
 		c.Pow.Modes.IPBound.Enabled = true
 		c.Admin.Enabled = true
-		c.Admin.Auth.Type = "none"
 		return c
 	}
 
@@ -309,7 +306,7 @@ func TestValidate_AdminNoneRequiresConfinedListener(t *testing.T) {
 		c.Admin.Listen = "0.0.0.0:8081"
 		err := Validate(c)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "requires admin.listen to be loopback")
+		assert.Contains(t, err.Error(), "admin.auth requires a token_file/token")
 	})
 
 	t.Run("bare port is rejected", func(t *testing.T) {

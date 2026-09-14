@@ -151,7 +151,7 @@ func (s *Service) ConfigGet(_ context.Context, _ ConfigGetRequest) (ConfigGetRes
 		},
 		"admin": map[string]interface{}{
 			"enabled": c.Admin.Enabled, "listen": c.Admin.Listen, "allow_cidrs": append([]string(nil), c.Admin.AllowCIDRs...),
-			"auth":              map[string]interface{}{"type": c.Admin.Auth.Type, "token_configured": c.Admin.Auth.Token != "" || c.Admin.Auth.TokenFile != "", "username_configured": c.Admin.Auth.Username != "", "password_configured": c.Admin.Auth.Password != ""},
+			"auth":              map[string]interface{}{"token_configured": c.Admin.Auth.Token != "" || c.Admin.Auth.TokenFile != ""},
 			"audit_log":         boolValue(c.Admin.AuditLog),
 			"mutations_enabled": c.Admin.MutationsEnabled,
 			"ip_block":          map[string]interface{}{"enabled": c.Admin.IPBlock.Enabled, "default_ttl": c.Admin.IPBlock.DefaultTTL.String(), "max_ttl": c.Admin.IPBlock.MaxTTL.String()},
@@ -171,7 +171,7 @@ func (s *Service) ConfigGet(_ context.Context, _ ConfigGetRequest) (ConfigGetRes
 			Managed:          status.Managed,
 			MutationsEnabled: c.Admin.MutationsEnabled,
 			ApplyEnabled: status.Managed && c.Admin.MutationsEnabled && c.Admin.ConfigManagement.Enabled &&
-				(c.Admin.Auth.Type == "token" || c.Admin.Auth.Type == "basic"),
+				(c.Admin.Auth.Token != ""),
 			HistoryEnabled: status.Managed,
 		}
 		_, raw, err := s.configState.Current()
@@ -248,7 +248,7 @@ func (s *Service) PendingList(_ context.Context, _ PendingListRequest) (PendingL
 
 func (s *Service) ipBlockMutationsEnabled() bool {
 	return s.cfg != nil && s.cfg.Admin.MutationsEnabled && s.cfg.Admin.IPBlock.Enabled &&
-		(s.cfg.Admin.Auth.Type == "token" || s.cfg.Admin.Auth.Type == "basic") && s.ipBlocks != nil
+		(s.cfg.Admin.Auth.Token != "") && s.ipBlocks != nil
 }
 
 func pendingEntryDTO(item risk.PendingSnapshot) PendingEntryDTO {

@@ -103,13 +103,9 @@ PoW 校验。链的入口是 `INPUT`，支持 `ACCEPT` / `REJECT` / `RATE_LIMIT`
 | `mode_disabled` | token 本身合法，但对应模式已被 `enabled: false` 关闭 |
 | `unverifiable` | token 本身合法，但**无法校验**——目前仅指 `ip_bound` token 遇到 `X-Real-IP` 缺失 |
 
-后三类都不是伪造，所以没有归入 `invalid`：按 `invalid` 处理会把运维自己的配置变更
-或代理故障报成客户端作弊。但它们同样**不能当作通过**——放行 `unverifiable` 等于承认
-一个没人验证过的 IP 绑定，放行 `mode_disabled` 等于让已关闭的模式继续可用。
-规则里必须显式拒绝，示例配置已包含相应规则。
+后三类不是伪造，但也**不能当作通过**，规则里必须显式拒绝（示例配置已包含）。
 
-> `pow_status` 由 `classifyPoW` 产出，它与 PoW-only 路径共用同一套校验函数。
-> 换句话说：PoW-only 路径会拒绝的 token，风控路径也不会判为 `valid`。
+> `pow_status` 与 PoW-only 路径共用同一套校验函数：PoW-only 会拒绝的 token，风控路径也不会判为 `valid`。
 
 被风控拒绝的响应会带 `X-Pow-Trace`，格式为 `链:规则` 以 `,` 连接，`>` 表示 JUMP：
 
@@ -117,15 +113,11 @@ PoW 校验。链的入口是 `INPUT`，支持 `ACCEPT` / `REJECT` / `RATE_LIMIT`
 X-Pow-Trace: INPUT:missing-pow>RISK_CHECK,RISK_CHECK:too-many-1h
 ```
 
-只记录**命中**的规则，超长会截断并以 `,...` 结尾。完整 trace（含未命中项）可通过
-管理 API 的 `rule.preview` 获取。
+只记录命中规则，超长截断。完整 trace（含未命中项）用管理 API 的 `rule.preview`。
 
-> `generic` 模式的 `max_uses` 在**所有**放行路径上生效——`ACCEPT`、`RATE_LIMIT`
-> 和 `REQUIRE_POW` 都会扣减配额，命中规则不等于跳过配额。
+> `generic` 模式的 `max_uses` 在所有放行路径（`ACCEPT` / `RATE_LIMIT` / `REQUIRE_POW`）上都扣减。
 >
-> `risk_control.pending` 在进入规则链前限制同一 IP 同时执行的受保护鉴权请求数。
-> 超过 `max_per_ip` 后返回 429 `ip_pending_blocked`，并持续阻断 `block_ttl`。
-> 当前 pending/block 状态保存在单个后端进程内；多副本之间暂不共享。
+> `risk_control.pending` 限制同一 IP 并发的受保护鉴权请求数，超过 `max_per_ip` 返回 429 并阻断 `block_ttl`。状态仅在单进程内，多副本不共享。
 
 ---
 
@@ -157,9 +149,7 @@ curl -i http://127.0.0.1:8080/whoami -H "X-Real-IP: 1.2.3.4"
 # {"ip":"1.2.3.4"}
 ```
 
-`/whoami` 返回后端看到的客户端 IP，供 PoW 页面生成 `ip_bound` token。
-它只读 `X-Real-IP`——与 `/verify_pow` 一致，缺失时返回 500 `missing_real_ip`，
-而不是回退到其他来源后在验证阶段才失败。
+`/whoami` 返回后端看到的客户端 IP（只读 `X-Real-IP`，缺失返回 500），供 PoW 页面生成 `ip_bound` token。
 
 ### 验证鉴权
 
@@ -286,7 +276,7 @@ print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 | `logging.log_denied` | `true` | 是否记录拒绝结果的日志 |
 | `admin.enabled` | `false` | 管理 API |
 | `admin.audit_log` | `true` | 是否记录管理操作审计 |
-| `admin.mutations_enabled` | `false` | Admin 写操作总开关；`auth.type=none` 始终只读 |
+| `admin.mutations_enabled` | `false` | Admin 写操作总开关；未配置 admin token 时始终只读 |
 | `admin.ip_block.enabled` | `false` | 启用实例级人工 IP Block/Unblock |
 | `admin.ip_block.default_ttl` | `1h` | 未指定 TTL 时的人工 Block 时长 |
 | `admin.ip_block.max_ttl` | `24h` | 人工 Block 最大时长，不支持永久 Block |
@@ -294,26 +284,15 @@ print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 
 以上默认值为 `true` 的布尔开关都是「省略即开启」——配置里不写不会把它们关掉。
 
-> **`pow.enabled` 与 `bypass_all` 不同**：前者只跳过 PoW 校验，风控规则照常生效
-> （一条 `REJECT` 规则仍会拒绝）；后者绕过 PoW 和普通风控。Admin 人工 IP Block
-> 是独立的紧急安全控制，优先级高于 `bypass_all`，不会被它放行。
+> `pow.enabled=false` 只跳过 PoW 校验，风控规则照常生效；`bypass_all=true` 则连 PoW 带普通风控一起绕过。Admin 人工 IP Block 优先级高于 `bypass_all`。
 
-> `admin.enabled=true` 时必须显式写 `admin.auth.type`。留空会被配置校验拒绝，
-> 避免管理接口在无认证状态下启动。`type: none` 仅在监听 loopback
-> 或配置了 `allow_cidrs` 时接受。
+> Admin 鉴权只支持 token：配置 `admin.auth.token_file` 或 `admin.auth.token` 即启用（`Authorization: Bearer <token>`）。都不配则无认证，仅接受 loopback 监听或配置了 `allow_cidrs` 的实例。
 
-> 配置管理只在使用显式非空 `--config <path>` 启动、`admin.mutations_enabled=true`、
-> `admin.config_management.enabled=true` 且 Admin 鉴权为 token/basic 时可写。草稿保存在
-> 当前实例内存，历史保存在配置文件同目录的 `.mirrors-waf-history/`。Apply/rollback 只原子
-> 更新配置文件，不修改当前运行态；操作成功后必须重启服务。敏感值在编辑器中显示为
-> `${SECRET:KEEP}`，本阶段不支持通过 API 轮换秘密。
->
-> `logging.log_*` 只影响日志，**不影响指标**——关掉日志不会让监控失明。
-> 5xx 无论如何都记录，因为那是服务自身故障而非对请求的判定。
+> 配置管理在显式 `--config <path>` 启动、`admin.mutations_enabled=true`、`admin.config_management.enabled=true` 且配置了 Admin token 时可写。草稿在内存，历史在配置文件同目录 `.mirrors-waf-history/`。Apply/rollback 只写配置文件，需重启生效；敏感值显示为 `${SECRET:KEEP}`，不支持 API 轮换。
 
-> 以下字段不被支持，配置里出现会被校验拒绝而非静默忽略：
-> `pow.modes.*.count_usage`（是否计量由模式本身决定，用 `max_uses` 控制上限）、
-> `risk_control.chains.*.rules[].match.risk_score_gte`（无组件产出风险分）。
+> `logging.log_*` 只影响日志不影响指标；5xx 始终记录。
+
+> 以下字段会被校验拒绝而非静默忽略：`pow.modes.*.count_usage`（用 `max_uses`）、`risk_control.chains.*.rules[].match.risk_score_gte`（无风险分组件）。
 
 环境变量覆盖（前缀 `MIRRORS_WAF_`，分隔符 `__`）：
 
@@ -385,7 +364,7 @@ POSTGRES_TEST_DSN='postgres://user:pass@127.0.0.1:5432/mirrors_pow?sslmode=disab
 go test -tags=benchmark -bench=. ./internal/app/...  # 压测
 ```
 
-`make coverage` 会只选择包含测试文件的包作为测试入口，同时用 `-coverpkg=./...` 把全仓生产代码纳入统计，避免 Go 工具链在无测试包上尝试调用缺失的 `covdata`。PostgreSQL 集成测试默认不参与普通测试；未设置 `POSTGRES_TEST_DSN` 时会安全跳过，使用 `make test-postgres` 时则会明确要求配置该变量。
+`make coverage` 用 `-coverpkg=./...` 把全仓生产代码纳入统计。PostgreSQL 集成测试需要设置 `POSTGRES_TEST_DSN`，否则跳过。
 
 基线（i7-14650HX，内存存储）：
 

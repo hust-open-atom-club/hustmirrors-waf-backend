@@ -44,7 +44,6 @@ admin:
   enabled: true
   listen: "0.0.0.0:8081"
   auth:
-    type: "token"
     token_file: "/run/secrets/admin.token"
   allow_cidrs:
     - "127.0.0.1/32"

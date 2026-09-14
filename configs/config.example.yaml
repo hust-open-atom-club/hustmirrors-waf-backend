@@ -258,12 +258,10 @@ admin:
   enabled: false
   listen: "127.0.0.1:8081"
   auth:
-    # token | basic | none. Required when enabled=true - an omitted type is
-    # rejected rather than silently defaulting to unauthenticated.
-    #
-    # "none" is only accepted when the listener is confined: either a
-    # loopback bind or a non-empty allow_cidrs.
-    type: "token"
+    # A configured token enables token auth (Authorization: Bearer <token>).
+    # With no token/token_file the admin API is unauthenticated, which is
+    # only accepted when the listener is confined: either a loopback bind
+    # or a non-empty allow_cidrs.
     token_file: "/etc/mirrors-waf/admin.token"
     # Alternatively, set the token inline:
     # token: "changeme"
@@ -274,7 +272,7 @@ admin:
   audit_log: true
 
   # All mutating Admin RPCs remain disabled unless this master switch and the
-  # feature switch below are both enabled. auth.type=none is always read-only.
+  # feature switch below are both enabled. No admin token means read-only.
   mutations_enabled: false
   ip_block:
     # Instance-scoped manual IP denylist. State is lost on restart and is not

@@ -150,7 +150,7 @@ func TestServer_Whoami(t *testing.T) {
 
 func TestServer_Admin_Ping_NoneAuth(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Admin.Auth.Type = "none"
+	cfg.Admin.Auth.Token = ""
 	asvc, err := admin.New(admin.Options{})
 	require.NoError(t, err)
 	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
@@ -163,7 +163,7 @@ func TestServer_Admin_Ping_NoneAuth(t *testing.T) {
 
 func TestServer_Admin_TokenAuth_Missing(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Admin.Auth.Type = "token"
+	cfg.Admin.Auth.Token = "t"
 	cfg.Admin.Auth.Token = "secret"
 	asvc, _ := admin.New(admin.Options{})
 	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
@@ -176,7 +176,7 @@ func TestServer_Admin_TokenAuth_Missing(t *testing.T) {
 
 func TestServer_Admin_TokenAuth_Valid(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Admin.Auth.Type = "token"
+	cfg.Admin.Auth.Token = "t"
 	cfg.Admin.Auth.Token = "secret"
 	asvc, _ := admin.New(admin.Options{})
 	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
@@ -190,7 +190,7 @@ func TestServer_Admin_TokenAuth_Valid(t *testing.T) {
 
 func TestServer_Admin_CIDR_Allow(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Admin.Auth.Type = "none"
+	cfg.Admin.Auth.Token = ""
 	cfg.Admin.AllowCIDRs = []string{"127.0.0.1/32"}
 	asvc, _ := admin.New(admin.Options{})
 	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
@@ -211,7 +211,7 @@ func TestServer_Admin_CIDR_Allow(t *testing.T) {
 
 func TestServer_Admin_ConfigValidate(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Admin.Auth.Type = "none"
+	cfg.Admin.Auth.Token = ""
 	asvc, _ := admin.New(admin.Options{})
 	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
 
@@ -228,7 +228,7 @@ func TestServer_Admin_ConfigValidate(t *testing.T) {
 
 func TestServer_Admin_SystemInfo(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Admin.Auth.Type = "none"
+	cfg.Admin.Auth.Token = ""
 	asvc, _ := admin.New(admin.Options{})
 	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
 	req := httptest.NewRequest(http.MethodPost, "/admin/api/system.info", strings.NewReader("{}"))
@@ -240,7 +240,7 @@ func TestServer_Admin_SystemInfo(t *testing.T) {
 
 func TestServer_Admin_RulePreview_NoEngine(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Admin.Auth.Type = "none"
+	cfg.Admin.Auth.Token = ""
 	asvc, _ := admin.New(admin.Options{})
 	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
 	body := `{"request":{"path":"/x.iso","is_protected":true,"pow_status":"missing"}}`

@@ -231,31 +231,14 @@ func (e *ValidationError) checkAdmin(a AdminConfig) {
 	if a.Listen == "" {
 		e.add("admin.listen must not be empty")
 	}
-	switch a.Auth.Type {
-	case "token":
-		if a.Auth.TokenFile == "" && a.Auth.Token == "" {
-			e.add("admin.auth.token_file or admin.auth.token is required when type=token")
-		}
-	case "basic":
-		if a.Auth.Username == "" || a.Auth.Password == "" {
-			e.add("admin.auth.username/password required when type=basic")
-		}
-	case "":
-		// An omitted auth.type used to fall through to the "none" handler,
-		// leaving the admin API - which can reload rules and read config -
-		// completely unauthenticated. Require the operator to say so.
-		e.add("admin.auth.type must be set when admin.enabled=true " +
-			"(use \"none\" only if the listener is confined to localhost or a trusted network)")
-	case "none":
-		// Explicitly unauthenticated. Only defensible when the listener is
+	if a.Auth.Token == "" && a.Auth.TokenFile == "" {
+		// Unauthenticated admin API: only defensible when the listener is
 		// not reachable from untrusted networks, so insist on either a
 		// loopback bind or a CIDR allow-list.
 		if !isLoopbackListen(a.Listen) && len(a.AllowCIDRs) == 0 {
-			e.add("admin.auth.type=none requires admin.listen to be loopback "+
-				"or admin.allow_cidrs to be set (listen=%q)", a.Listen)
+			e.add("admin.auth requires a token_file/token unless admin.listen is loopback "+
+				"or admin.allow_cidrs is set (listen=%q)", a.Listen)
 		}
-	default:
-		e.add("admin.auth.type %q is not supported", a.Auth.Type)
 	}
 	for i, cidr := range a.AllowCIDRs {
 		if _, _, err := net.ParseCIDR(cidr); err != nil {
@@ -283,8 +266,8 @@ func (e *ValidationError) checkAdmin(a AdminConfig) {
 		if !a.MutationsEnabled {
 			e.add("admin.config_management.enabled requires admin.mutations_enabled=true")
 		}
-		if a.Auth.Type != "token" && a.Auth.Type != "basic" {
-			e.add("admin.config_management.enabled requires admin.auth.type=token or basic")
+		if a.Auth.Token == "" && a.Auth.TokenFile == "" {
+			e.add("admin.config_management.enabled requires admin.auth token_file/token")
 		}
 	}
 }

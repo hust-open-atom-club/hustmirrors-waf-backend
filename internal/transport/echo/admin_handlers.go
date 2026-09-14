@@ -119,25 +119,14 @@ func (s *Server) recordAdminAction(c echov4.Context, action, outcome, detail str
 // identity beyond "the token holder", so it is reported as such rather
 // than echoing any part of the credential.
 func adminActor(c echov4.Context, cfg *config.Config) string {
-	if cfg == nil {
-		return "unknown"
+	if cfg == nil || cfg.Admin.Auth.Token == "" {
+		return "anonymous"
 	}
-	switch cfg.Admin.Auth.Type {
-	case "basic":
-		if u, p, ok := c.Request().BasicAuth(); ok && u != "" &&
-			cfg.Admin.Auth.Username != "" && cfg.Admin.Auth.Password != "" &&
-			secureEqual(u, cfg.Admin.Auth.Username) && secureEqual(p, cfg.Admin.Auth.Password) {
-			return u
-		}
-		return "unknown"
-	case "token":
-		got := bearerToken(c.Request().Header.Get("Authorization"))
-		if got != "" && cfg.Admin.Auth.Token != "" && secureEqual(got, cfg.Admin.Auth.Token) {
-			return "token"
-		}
-		return "unknown"
+	got := bearerToken(c.Request().Header.Get("Authorization"))
+	if got != "" && secureEqual(got, cfg.Admin.Auth.Token) {
+		return "token"
 	}
-	return "anonymous"
+	return "unknown"
 }
 
 func (s *Server) writeAdminResponse(c echov4.Context, data interface{}, err error, action string) error {

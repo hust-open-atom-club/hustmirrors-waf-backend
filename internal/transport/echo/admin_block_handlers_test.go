@@ -17,15 +17,12 @@ import (
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/risk"
 )
 
-func newBlockAdminServer(t *testing.T, authType string) (*Server, *captureAudit) {
+func newBlockAdminServer(t *testing.T, token string) (*Server, *captureAudit) {
 	t.Helper()
 	cfg := &config.Config{}
 	config.ApplyDefaults(cfg)
 	cfg.Admin.Enabled = true
-	cfg.Admin.Auth.Type = authType
-	cfg.Admin.Auth.Token = "secret-token"
-	cfg.Admin.Auth.Username = "ops"
-	cfg.Admin.Auth.Password = "secret-password"
+	cfg.Admin.Auth.Token = token
 	cfg.Admin.MutationsEnabled = true
 	cfg.Admin.IPBlock.Enabled = true
 	cfg.Admin.IPBlock.DefaultTTL = time.Hour
@@ -41,12 +38,12 @@ func newBlockAdminServer(t *testing.T, authType string) (*Server, *captureAudit)
 }
 
 func TestAdminRiskBlocksAddAndUnblock(t *testing.T) {
-	server, audit := newBlockAdminServer(t, "basic")
+	server, audit := newBlockAdminServer(t, "secret-token")
 
 	body := `{"ip":"192.0.2.60","confirm_ip":"192.0.2.60","ttl_seconds":3600,"reason":"suspicious downloader"}`
 	req := httptest.NewRequest(http.MethodPost, "/admin/api/risk.blocks.add", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth("ops", "secret-password")
+	req.Header.Set("Authorization", "Bearer secret-token")
 	rec := httptest.NewRecorder()
 	server.Echo().ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
@@ -59,7 +56,7 @@ func TestAdminRiskBlocksAddAndUnblock(t *testing.T) {
 	events := audit.all()
 	require.Len(t, events, 1)
 	assert.Equal(t, "risk.blocks.add", events[0].Action)
-	assert.Equal(t, "ops", events[0].Actor)
+	assert.Equal(t, "token", events[0].Actor)
 	assert.True(t, events[0].OK)
 	assert.Len(t, events[0].Target, 12)
 	assert.NotEqual(t, "192.0.2.60", events[0].Target)
@@ -69,7 +66,7 @@ func TestAdminRiskBlocksAddAndUnblock(t *testing.T) {
 	unblockBody := `{"ip":"192.0.2.60","confirm_ip":"192.0.2.60"}`
 	unblockReq := httptest.NewRequest(http.MethodPost, "/admin/api/risk.blocks.unblock", strings.NewReader(unblockBody))
 	unblockReq.Header.Set("Content-Type", "application/json")
-	unblockReq.SetBasicAuth("ops", "secret-password")
+	unblockReq.Header.Set("Authorization", "Bearer secret-token")
 	unblockRec := httptest.NewRecorder()
 	server.Echo().ServeHTTP(unblockRec, unblockReq)
 	require.Equal(t, http.StatusOK, unblockRec.Code, unblockRec.Body.String())
@@ -78,7 +75,7 @@ func TestAdminRiskBlocksAddAndUnblock(t *testing.T) {
 
 func TestAdminRiskBlocksMutationPolicy(t *testing.T) {
 	t.Run("none auth is read only", func(t *testing.T) {
-		server, audit := newBlockAdminServer(t, "none")
+		server, audit := newBlockAdminServer(t, "")
 		body := `{"ip":"192.0.2.61","confirm_ip":"192.0.2.61","reason":"test"}`
 		req := httptest.NewRequest(http.MethodPost, "/admin/api/risk.blocks.add", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -94,7 +91,7 @@ func TestAdminRiskBlocksMutationPolicy(t *testing.T) {
 	})
 
 	t.Run("missing token is audited", func(t *testing.T) {
-		server, audit := newBlockAdminServer(t, "token")
+		server, audit := newBlockAdminServer(t, "secret-token")
 		req := httptest.NewRequest(http.MethodPost, "/admin/api/risk.blocks.list", strings.NewReader(`{}`))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
@@ -109,7 +106,7 @@ func TestAdminRiskBlocksMutationPolicy(t *testing.T) {
 	})
 
 	t.Run("invalid reason is not copied to audit", func(t *testing.T) {
-		server, audit := newBlockAdminServer(t, "token")
+		server, audit := newBlockAdminServer(t, "secret-token")
 		body := "{\"ip\":\"192.0.2.62\",\"confirm_ip\":\"192.0.2.62\",\"reason\":\"bad\\nreason\"}"
 		req := httptest.NewRequest(http.MethodPost, "/admin/api/risk.blocks.add", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")

@@ -201,11 +201,11 @@ type AdminStatsConfig struct {
 }
 
 type AuthConfig struct {
-	Type      string `mapstructure:"type"` // token | basic | none
 	TokenFile string `mapstructure:"token_file"`
-	Token     string `mapstructure:"token"`    // inline alternative to TokenFile
-	Username  string `mapstructure:"username"` // for basic
-	Password  string `mapstructure:"password"` // for basic
+	Token     string `mapstructure:"token"` // inline alternative to TokenFile
+	// A non-empty token enables token auth; an empty one leaves the admin
+	// API unauthenticated, which validation confines to loopback/CIDR
+	// allow-listed listeners.
 }
 
 type LoggingConfig struct {

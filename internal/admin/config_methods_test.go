@@ -46,7 +46,7 @@ func TestConfigMethods_MutationGateAndUnmanaged(t *testing.T) {
 		{
 			name: "authenticated mutations required",
 			configure: func(cfg *config.Config) {
-				cfg.Admin.Auth.Type = "none"
+				cfg.Admin.Auth.Token = ""
 			},
 			state: func(t *testing.T) ConfigState { return newManagedConfigStore(t, raw).store },
 			code:  "MUTATION_AUTH_REQUIRED",
@@ -356,7 +356,7 @@ func newManagedConfigStore(t *testing.T, raw string) configTestFixture {
 func configMutationTestConfig() *config.Config {
 	cfg := &config.Config{}
 	cfg.Admin.MutationsEnabled = true
-	cfg.Admin.Auth.Type = "token"
+	cfg.Admin.Auth.Token = "t"
 	cfg.Admin.ConfigManagement.Enabled = true
 	return cfg
 }
@@ -386,7 +386,6 @@ admin:
   enabled: true
   listen: 127.0.0.1:8081
   auth:
-    type: token
     token: %q
   mutations_enabled: true
   config_management:

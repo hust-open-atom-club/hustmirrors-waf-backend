@@ -35,7 +35,6 @@ func TestService_ConfigGetRedactsSecrets(t *testing.T) {
 	cfg.Storage.Redis.Password = "redis-secret"
 	cfg.Admin.Auth.Token = "admin-token-secret"
 	cfg.Admin.Auth.TokenFile = "C:/secret/admin.token"
-	cfg.Admin.Auth.Password = "admin-password-secret"
 	cfg.Logging.LogSalt = "logging-secret"
 
 	svc, err := New(Options{Config: cfg})
@@ -49,7 +48,7 @@ func TestService_ConfigGetRedactsSecrets(t *testing.T) {
 	for _, secret := range []string{
 		"pow-secret", "old-secret", "secret-user", "secret-pass", "private",
 		"redis-secret", "admin-token-secret", "C:/secret/admin.token",
-		"admin-password-secret", "logging-secret",
+		"logging-secret",
 	} {
 		assert.NotContains(t, encoded, secret)
 	}

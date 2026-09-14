@@ -37,7 +37,7 @@ func (s *Service) configMutationAccess() error {
 	if s.cfg == nil || !s.cfg.Admin.MutationsEnabled {
 		return MutationsDisabledError()
 	}
-	if s.cfg.Admin.Auth.Type != "token" && s.cfg.Admin.Auth.Type != "basic" {
+	if s.cfg.Admin.Auth.Token == "" {
 		return MutationAuthRequiredError()
 	}
 	if !s.cfg.Admin.ConfigManagement.Enabled {
@@ -63,7 +63,7 @@ func (s *Service) ConfigStatus(_ context.Context, _ ConfigStatusRequest) (Config
 		Managed:          status.Managed,
 		MutationsEnabled: s.cfg != nil && s.cfg.Admin.MutationsEnabled,
 		ApplyEnabled: status.Managed && s.cfg != nil && s.cfg.Admin.MutationsEnabled &&
-			s.cfg.Admin.ConfigManagement.Enabled && (s.cfg.Admin.Auth.Type == "token" || s.cfg.Admin.Auth.Type == "basic"),
+			s.cfg.Admin.ConfigManagement.Enabled && s.cfg.Admin.Auth.Token != "",
 		HistoryEnabled: status.Managed,
 	}
 	if status.Draft != nil {

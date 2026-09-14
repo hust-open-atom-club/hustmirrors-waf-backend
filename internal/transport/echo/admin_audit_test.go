@@ -49,7 +49,7 @@ func newAuditServer(t *testing.T, cfg *config.Config) (*Server, *captureAudit) {
 // only implementation discarded everything.
 func TestAdminAudit_RecordsSuccess(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Admin.Auth.Type = "none"
+	
 	s, cap := newAuditServer(t, cfg)
 
 	req := httptest.NewRequest(http.MethodPost, "/admin/api/system.ping", nil)
@@ -71,7 +71,7 @@ func TestAdminAudit_RecordsSuccess(t *testing.T) {
 // service, so auditing there would have missed it entirely.
 func TestAdminAudit_RecordsBindFailure(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Admin.Auth.Type = "none"
+	
 	s, cap := newAuditServer(t, cfg)
 
 	req := httptest.NewRequest(http.MethodPost, "/admin/api/config.validate",
@@ -87,41 +87,23 @@ func TestAdminAudit_RecordsBindFailure(t *testing.T) {
 	assert.False(t, events[0].OK, "a rejected request must be recorded as a failure")
 }
 
-// TestAdminAudit_ActorFromBasicAuth checks the identity carried into the
-// trail, and that token auth reports a placeholder rather than echoing any
-// part of the credential.
-func TestAdminAudit_ActorFromBasicAuth(t *testing.T) {
+// TestAdminAudit_ActorFromToken checks that token auth reports a
+// placeholder rather than echoing any part of the credential.
+func TestAdminAudit_ActorFromToken(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Admin.Auth.Type = "basic"
-	cfg.Admin.Auth.Username = "ops"
-	cfg.Admin.Auth.Password = "pw"
+	cfg.Admin.Auth.Token = "secret-token-value"
 	s, cap := newAuditServer(t, cfg)
 
 	req := httptest.NewRequest(http.MethodPost, "/admin/api/system.ping", nil)
-	req.SetBasicAuth("ops", "pw")
+	req.Header.Set("Authorization", "Bearer secret-token-value")
 	rec := httptest.NewRecorder()
 	s.Echo().ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	events := cap.all()
 	require.Len(t, events, 1)
-	assert.Equal(t, "ops", events[0].Actor)
-
-	cfgToken := &config.Config{}
-	cfgToken.Admin.Auth.Type = "token"
-	cfgToken.Admin.Auth.Token = "secret-token-value"
-	s2, cap2 := newAuditServer(t, cfgToken)
-
-	req2 := httptest.NewRequest(http.MethodPost, "/admin/api/system.ping", nil)
-	req2.Header.Set("Authorization", "Bearer secret-token-value")
-	rec2 := httptest.NewRecorder()
-	s2.Echo().ServeHTTP(rec2, req2)
-	require.Equal(t, http.StatusOK, rec2.Code)
-
-	events2 := cap2.all()
-	require.Len(t, events2, 1)
-	assert.Equal(t, "token", events2[0].Actor)
-	assert.NotContains(t, events2[0].Actor, "secret-token-value",
+	assert.Equal(t, "token", events[0].Actor)
+	assert.NotContains(t, events[0].Actor, "secret-token-value",
 		"the credential must never reach the audit trail")
 }
 
@@ -130,7 +112,7 @@ func TestAdminAudit_ActorFromBasicAuth(t *testing.T) {
 func TestAdminAudit_HonoursConfigSwitch(t *testing.T) {
 	newServer := func(auditLog *bool) *Server {
 		cfg := &config.Config{}
-		cfg.Admin.Auth.Type = "none"
+		
 		cfg.Admin.AuditLog = auditLog
 		asvc, err := admin.New(admin.Options{Config: cfg})
 		require.NoError(t, err)

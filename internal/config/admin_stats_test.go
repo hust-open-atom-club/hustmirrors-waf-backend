@@ -13,7 +13,6 @@ func validAdminStatsConfig() *Config {
 	applyDefaults(cfg)
 	cfg.Pow.Modes.IPBound.Enabled = true
 	cfg.Admin.Enabled = true
-	cfg.Admin.Auth.Type = "none"
 	return cfg
 }
 
@@ -46,17 +45,17 @@ func TestValidate_AdminIPBlockTTLRange(t *testing.T) {
 func TestValidate_AdminConfigManagementRequiresMutationAuth(t *testing.T) {
 	tests := []struct {
 		name      string
-		authType  string
+		token     string
 		mutations bool
 		want      string
 	}{
-		{name: "mutations disabled", authType: "token", mutations: false, want: "requires admin.mutations_enabled=true"},
-		{name: "none auth", authType: "none", mutations: true, want: "requires admin.auth.type=token or basic"},
+		{name: "mutations disabled", token: "t", mutations: false, want: "requires admin.mutations_enabled=true"},
+		{name: "no auth token", token: "", mutations: true, want: "requires admin.auth token_file/token"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := validAdminStatsConfig()
-			cfg.Admin.Auth.Type = tt.authType
+			cfg.Admin.Auth.Token = tt.token
 			cfg.Admin.MutationsEnabled = tt.mutations
 			cfg.Admin.ConfigManagement.Enabled = true
 			err := Validate(cfg)

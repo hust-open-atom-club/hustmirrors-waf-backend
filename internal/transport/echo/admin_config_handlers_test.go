@@ -31,7 +31,7 @@ func TestAdminConfigManagementHTTPFlowAndAudit(t *testing.T) {
 	cfg := &config.Config{}
 	config.ApplyDefaults(cfg)
 	cfg.Admin.Enabled = true
-	cfg.Admin.Auth.Type = "token"
+	cfg.Admin.Auth.Token = "t"
 	cfg.Admin.Auth.Token = "admin-test-token"
 	cfg.Admin.MutationsEnabled = true
 	cfg.Admin.ConfigManagement.Enabled = true
@@ -101,7 +101,7 @@ func TestAdminConfigManagementNoneAuthIsReadOnly(t *testing.T) {
 	cfg := &config.Config{}
 	config.ApplyDefaults(cfg)
 	cfg.Admin.Enabled = true
-	cfg.Admin.Auth.Type = "none"
+	cfg.Admin.Auth.Token = ""
 	cfg.Admin.MutationsEnabled = true
 	cfg.Admin.ConfigManagement.Enabled = true
 	store, err := configstore.New("", nil, false)
@@ -127,7 +127,7 @@ func doAdminConfigRPCWithoutAuth(t *testing.T, server *Server, action string, bo
 	require.NoError(t, err)
 	req := httptest.NewRequest(http.MethodPost, "/admin/api/"+action, strings.NewReader(string(payload)))
 	req.Header.Set("Content-Type", "application/json")
-	if server.cfg != nil && server.cfg.Admin.Auth.Type == "token" {
+	if server.cfg != nil && server.cfg.Admin.Auth.Token != "" {
 		req.Header.Set("Authorization", "Bearer admin-test-token")
 	}
 	rec := httptest.NewRecorder()
@@ -155,7 +155,6 @@ admin:
   enabled: true
   listen: 127.0.0.1:8081
   auth:
-    type: token
     token: %q
   mutations_enabled: true
   config_management:

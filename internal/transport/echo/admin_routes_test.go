@@ -13,7 +13,7 @@ import (
 
 func TestAdminRoutesExposePhase3ControlPlane(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Admin.Auth.Type = "none"
+	cfg.Admin.Auth.Token = ""
 	svc, err := admin.New(admin.Options{Config: cfg})
 	require.NoError(t, err)
 	server := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: svc})

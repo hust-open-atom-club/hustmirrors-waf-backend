@@ -28,7 +28,7 @@ func MutationsDisabledError() error {
 }
 
 func MutationAuthRequiredError() error {
-	return newRPCError(http.StatusForbidden, "MUTATION_AUTH_REQUIRED", "admin mutations require token or basic authentication")
+	return newRPCError(http.StatusForbidden, "MUTATION_AUTH_REQUIRED", "admin mutations require token authentication")
 }
 
 func IPBlockDisabledError() error {
