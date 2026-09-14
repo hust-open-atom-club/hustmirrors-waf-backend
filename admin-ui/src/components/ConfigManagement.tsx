@@ -14,6 +14,7 @@ import type {
   ConfigValidate,
 } from '../types'
 import { formatDate } from '../utils'
+import VisualConfigEditor from './VisualConfigEditor'
 
 type Confirmation = { mode: 'apply'; diff: ConfigDiff } | { mode: 'rollback'; diff: ConfigDiff; target: ConfigHistoryEntry }
 type Operation = 'save' | 'discard' | 'validate' | 'diff' | 'rollback-preview' | 'confirm' | null
@@ -319,7 +320,7 @@ export default function ConfigManagement({ auth, onError, onToast, refreshNonce 
     </div>
 
     <div className="panel capability-strip">
-      <div><Settings2 size={18} /><span><strong>能力开关</strong><small>由服务端状态决定；前端不会绕过权限。</small></span></div>
+      <div><Settings2 size={18} /><span><strong>能力开关</strong></span></div>
       <div className="capability-list">
         <CapabilityBadge label="MANAGED" enabled={capabilities.managed} />
         <CapabilityBadge label="MUTATIONS" enabled={capabilities.mutations_enabled} />
@@ -329,14 +330,13 @@ export default function ConfigManagement({ auth, onError, onToast, refreshNonce 
     </div>
 
     {notice && <div className="config-notice" role="alert"><AlertTriangle size={17} /><span>{notice}</span><button type="button" onClick={() => setNotice('')} aria-label="关闭提示"><X size={15} /></button></div>}
-    {!canEdit && <div className="config-readonly-note"><AlertTriangle size={17} /><div><strong>配置写操作不可用</strong><span>仍可查看状态与历史。请检查 managed、Admin mutations、认证方式和 config management 开关。</span></div></div>}
+    {!canEdit && <div className="config-readonly-note"><AlertTriangle size={17} /><div><strong>配置写操作不可用</strong><span>检查 managed、mutations、认证方式和 config management 开关。</span></div></div>}
 
     <div className="config-workspace">
       <div className="panel config-editor-panel">
         <div className="panel-header"><div><span>EDITABLE YAML · REDACTED</span><h2>配置草稿</h2></div><div className="editor-state"><span className={editorDirty ? 'dirty' : draft?.validated ? 'valid' : ''} />{editorDirty ? 'UNSAVED' : draft?.validated ? 'VALIDATED' : draft ? 'SAVED' : 'CURRENT'}</div></div>
-        <label className="visually-hidden" htmlFor="config-yaml">可编辑配置 YAML</label>
-        <textarea id="config-yaml" className="yaml-editor config-yaml-editor" spellCheck={false} value={yaml} disabled={!canEdit} onChange={(event) => { setYaml(event.target.value); setValidation(null); setDiff(null); setNotice('') }} aria-describedby="config-editor-help" />
-        <p className="editor-help" id="config-editor-help">敏感值使用服务端占位符保留。草稿只保存在服务端和当前页面内存，不使用浏览器存储。</p>
+        <VisualConfigEditor yamlText={yaml} disabled={!canEdit} onChange={(next) => { setYaml(next); setValidation(null); setDiff(null); setNotice('') }} />
+        <p className="editor-help" id="config-editor-help">敏感值以占位符保留，服务端会在保存时合并真实值。草稿只保存在服务端和当前页面内存。</p>
         <div className="config-actions">
           <button type="button" className="secondary-button" onClick={() => void refreshState()} disabled={busy}><RefreshCw size={16} className={operation === 'confirm' ? 'spin' : ''} /> 刷新状态</button>
           <button type="button" className="secondary-button" onClick={() => void saveDraft()} disabled={!canEdit || !yaml.trim() || busy}><FileCode2 size={16} /> 保存草稿</button>
