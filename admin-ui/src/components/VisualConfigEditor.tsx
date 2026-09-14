@@ -54,7 +54,7 @@ export default function VisualConfigEditor({ yamlText, onChange, disabled }: {
       <button type="button" className={!showYaml ? 'active' : ''} onClick={() => setShowYaml(false)}>表单</button>
       <button type="button" className={showYaml ? 'active' : ''} onClick={() => setShowYaml(true)}>YAML</button>
     </div>
-    {parseError && <div className="config-notice"><AlertTriangle size={16} /><span>当前草稿不是合法 YAML：{parseError}。请切换到 YAML 修复后再用表单编辑。</span></div>}
+    {parseError && <div className="config-notice"><AlertTriangle size={16} /><span>YAML 解析失败：{parseError}</span></div>}
     {showYaml
       ? <textarea className="yaml-editor visual-yaml" spellCheck={false} value={yamlText} disabled={disabled} onChange={(event) => onChange(event.target.value)} aria-label="配置 YAML" />
       : <div className="visual-sections" aria-label="可视化配置表单">
@@ -104,7 +104,7 @@ function TextRow({ label, path, doc, disabled, setPath, placeholder }: { label: 
   return <label className="visual-field">
     <span>{label}</span>
     {secret
-      ? <span className="secret-field"><Lock size={12} /> 保密值保持不变</span>
+      ? <span className="secret-field"><Lock size={12} /> 保密值</span>
       : <input value={value} disabled={disabled} placeholder={placeholder} onChange={(event) => setPath(path, event.target.value)} />}
   </label>
 }
@@ -116,7 +116,7 @@ function NumberRow({ label, path, doc, disabled, setPath, min }: { label: string
   return <label className="visual-field">
     <span>{label}</span>
     {secret
-      ? <span className="secret-field"><Lock size={12} /> 保密值保持不变</span>
+      ? <span className="secret-field"><Lock size={12} /> 保密值</span>
       : <input type="number" value={value} min={min} disabled={disabled} onChange={(event) => setPath(path, event.target.value === '' ? '' : Number(event.target.value))} />}
   </label>
 }
@@ -165,7 +165,7 @@ function StringList({ label, path, doc, disabled, setPath, placeholder }: { labe
 type SectionProps = { doc: Obj; disabled: boolean; setPath: (path: string[], value: unknown) => void }
 
 function ServerSection({ doc, disabled, setPath }: SectionProps) {
-  return <Section title="服务" hint="监听地址与超时">
+  return <Section title="服务">
     <div className="visual-grid">
       <TextRow label="监听地址" path={['server', 'listen']} doc={doc} disabled={disabled} setPath={setPath} placeholder="127.0.0.1:8080" />
       <TextRow label="读超时" path={['server', 'read_timeout']} doc={doc} disabled={disabled} setPath={setPath} placeholder="2s" />
@@ -211,7 +211,7 @@ function PowSection({ doc, disabled, setPath }: SectionProps) {
 }
 
 function ProtectionSection({ doc, disabled, setPath }: SectionProps) {
-  return <Section title="路径保护" hint="受保护的扩展名与路径">
+  return <Section title="路径保护">
     <div className="visual-stack">
       <StringList label="受保护扩展名" path={['protection', 'protected_extensions']} doc={doc} disabled={disabled} setPath={setPath} placeholder=".iso" />
       <StringList label="受保护路径（正则）" path={['protection', 'protected_paths']} doc={doc} disabled={disabled} setPath={setPath} placeholder="^/ubuntu/" />
@@ -232,7 +232,7 @@ function RiskSection({ doc, disabled, setPath }: SectionProps) {
     </div>
     {(counters !== undefined || chains !== undefined) && <div className="visual-subgroup">
       <strong>计数器与规则链</strong>
-      <p className="visual-note">结构化配置，请切换到 YAML 编辑（{Array.isArray(counters) ? counters.length : 0} 个计数器 · {chains && typeof chains === 'object' ? Object.keys(chains as Obj).length : 0} 条链）。</p>
+      <p className="visual-note">请用 YAML 编辑。</p>
     </div>}
   </Section>
 }
@@ -260,7 +260,7 @@ function CleanupSection({ doc, disabled, setPath }: SectionProps) {
 }
 
 function StorageSection({ doc, disabled, setPath }: SectionProps) {
-  return <Section title="存储" hint="memory / postgres / redis">
+  return <Section title="存储">
     <div className="visual-grid">
       <SelectRow label="主存储驱动" path={['storage', 'driver']} doc={doc} disabled={disabled} setPath={setPath} options={['memory', 'postgres', 'redis']} />
       <SelectRow label="计数器驱动" path={['storage', 'counter_driver']} doc={doc} disabled={disabled} setPath={setPath} options={['memory', 'redis']} />
@@ -295,7 +295,7 @@ function AdminSection({ doc }: { doc: Obj }) {
     rows.push(['配置管理', ((a.config_management as Obj | undefined)?.enabled === true ? '开启' : '关闭')])
   }
   if (rows.length === 0) return null
-  return <Section title="管理 API（只读）" hint="涉及凭据与自锁风险，请通过配置文件修改">
+  return <Section title="管理 API（只读）">
     <div className="readonly-rows">
       {rows.map(([label, value]) => <div className="readonly-row" key={label}><span>{label}</span><strong>{value}</strong></div>)}
     </div>

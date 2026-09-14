@@ -10,8 +10,8 @@
 |---|---|---|
 | Go | 1.24+ | 构建后端 |
 | Nginx | 1.18+ | `auth_request` + `limit_rate` 变量支持 |
-| PostgreSQL | 14+ | 生产存储（可选，开发可用内存） |
-| Redis | 6+ | 生产计数器（可选，开发可用内存） |
+| PostgreSQL | 14+ | 可选，`storage.driver: postgres` 时需要 |
+| Redis | 6+ | 可选，`storage.counter_driver: redis` 或 `storage.driver: redis` 时需要 |
 | goose | v3 | 数据库迁移工具 |
 
 ---
@@ -27,7 +27,7 @@ make build
 ./bin/server --version
 ```
 
-带版本元信息构建（推荐）：
+带版本元信息构建：
 
 ```bash
 VERSION=v1.0.0 COMMIT=$(git rev-parse --short HEAD) make build
@@ -43,13 +43,13 @@ cp configs/config.example.yaml /etc/mirrors-waf/config.yaml
 
 编辑 `/etc/mirrors-waf/config.yaml`，重点确认：
 
-- `server.listen`：后端监听地址，默认 `127.0.0.1:8080`（**不要监听 0.0.0.0**）
+- `server.listen`：后端监听地址，默认 `127.0.0.1:8080`
 - `pow.modes.generic.max_uses`：generic 链接最大使用次数
-- `pow.public_salt`：公开盐，**上线前必须改掉默认值**
-- `storage.driver`：生产用 `postgres`，测试用 `memory`
-- `storage.counter_driver`：生产用 `redis`，测试用 `memory`
+- `pow.public_salt`：公开盐
+- `storage.driver`：`memory` / `postgres` / `redis`
+- `storage.counter_driver`：`memory` / `redis`
 - `risk_control.enabled`：是否启用风控规则链
-- `admin.enabled`：管理 API，**生产默认关闭**
+- `admin.enabled`：管理 API，默认关闭；开启后配置 `admin.auth.token_file`（无 token 时仅接受 loopback/allow_cidrs）
 
 环境变量覆盖（前缀 `MIRRORS_WAF_`，分隔符 `__`）：
 
@@ -83,7 +83,7 @@ make migrate-up
 
 ## 5. 启动
 
-### 手动启动（测试用）
+### 手动启动
 
 ```bash
 ./bin/server --config /etc/mirrors-waf/config.yaml
@@ -101,11 +101,7 @@ curl http://127.0.0.1:8080/readyz
 
 ### Docker 测试部署
 
-Docker 部署适合测试环境和单机联调。镜像内包含 Go 后端和构建后的 Admin UI，运行时使用 UID/GID `10001` 的非 root 用户。现有 systemd 部署不受影响。
-
 #### 1. 准备 Admin token
-
-不要把真实 token 写入配置文件或提交到 Git：
 
 ```bash
 mkdir -p deploy/docker/secrets
@@ -113,21 +109,18 @@ umask 077
 openssl rand -hex 32 > deploy/docker/secrets/admin.token
 ```
 
-`deploy/docker/secrets/*` 已被 Git 忽略，只有 `.gitkeep` 会被提交。
+`deploy/docker/secrets/*` 已被 Git 忽略。
 
 #### 2. 检查测试配置
 
-测试配置位于 `deploy/docker/config.test.yaml`，默认：
+测试配置位于 `deploy/docker/config.test.yaml`：
 
-- 主服务监听容器内 `0.0.0.0:8080`；
-- Admin Server 监听容器内 `0.0.0.0:8081`；
-- 宿主机只绑定 `127.0.0.1:8080` 和 `127.0.0.1:8081`；
-- 使用 memory storage，不依赖 PostgreSQL/Redis；
-- Admin 使用 `/run/secrets/admin.token`；
-- `mutations_enabled` 和 `config_management.enabled` 默认关闭；
-- Prometheus/Loki 未配置时，后台对应模块显示降级状态。
+- 宿主机只绑定 `127.0.0.1:8080` 和 `127.0.0.1:8081`
+- memory storage，不依赖 PostgreSQL/Redis
+- Admin 使用 `/run/secrets/admin.token`
+- `mutations_enabled` 和 `config_management.enabled` 默认关闭
+- Prometheus/Loki 未配置时后台对应模块显示降级状态
 
-`public_salt` 仅用于测试，进入共享环境前必须替换，并通过独立配置或密钥管理系统注入。
 
 #### 3. 构建并启动
 
@@ -157,30 +150,19 @@ curl http://127.0.0.1:8080/healthz
 curl http://127.0.0.1:8080/readyz
 ```
 
-后台地址：
-
-```text
-http://127.0.0.1:8081/admin/
-```
-
-浏览器登录时使用 `deploy/docker/secrets/admin.token` 中的 token。Admin API 不直接暴露给公网；需要远程访问时，应通过 VPN、SSH 隧道或受控反向代理，并继续限制来源网段。
+后台地址：`http://127.0.0.1:8081/admin/`，登录用 `deploy/docker/secrets/admin.token` 中的 token。
 
 #### 5. 容器安全约束
 
-测试 Compose 默认启用：
+- 非 root 用户 `10001:10001`
+- `read_only: true` root filesystem
+- `/tmp` 仅 64 MiB `tmpfs`
+- 丢弃全部 Linux capabilities、`no-new-privileges`
+- Docker healthcheck 请求 `/healthz`
 
-- 非 root 用户 `10001:10001`；
-- `read_only: true` root filesystem；
-- `/tmp` 仅提供 64 MiB `tmpfs`；
-- 丢弃全部 Linux capabilities；
-- `no-new-privileges`；
-- Docker healthcheck 请求主服务 `/healthz`。
+配置管理 Apply 需要可写的配置卷和 `.mirrors-waf-history` 目录；测试 Compose 默认关闭配置管理。
 
-配置管理 Apply 需要写入配置文件和 `.mirrors-waf-history` 目录。测试 Compose 默认关闭配置管理，不能直接用于验证 Apply/Rollback。若要验证该流程，应准备专用的可写配置卷、开启 `admin.mutations_enabled` 和 `admin.config_management.enabled`，并在测试结束后清理历史目录。
-
-#### 7. 接入 Prometheus/Loki
-
-将 `deploy/docker/config.test.yaml` 中的地址改为容器网络可访问的服务名，例如：
+#### 6. 接入 Prometheus/Loki
 
 ```yaml
 admin:
@@ -189,13 +171,9 @@ admin:
     loki_url: "http://loki:3100"
 ```
 
-不要让浏览器直接访问 Prometheus 或 Loki；后台 API 继续作为唯一聚合入口。
-
 ---
 
-### systemd 托管（生产用）
-
-Docker 测试部署不会替代现有 systemd 方式。生产环境仍可使用仓库中的 unit：
+### systemd 托管
 
 ```bash
 sudo cp deploy/systemd/mirrors-waf-backend.service /etc/systemd/system/
@@ -217,11 +195,7 @@ journalctl -u mirrors-waf-backend -f
 
 ---
 
-## 6. Nginx 联调（上线前必做）
-
-这一步验证 Nginx `auth_request` 和后端的完整链路。**必须在一台测试机上跑通，不能直接上生产。**
-
-### 6.1 配置 Nginx
+## 6. Nginx 联调
 
 ```bash
 sudo cp deploy/nginx/mirrors-waf.conf /etc/nginx/conf.d/
@@ -229,100 +203,6 @@ sudo cp deploy/nginx/mirrors-waf.conf /etc/nginx/conf.d/
 sudo nginx -t
 sudo systemctl reload nginx
 ```
-
-### 6.2 准备测试文件
-
-```bash
-sudo mkdir -p /srv/mirrors
-sudo dd if=/dev/zero of=/srv/mirrors/test.iso bs=1M count=10
-sudo dd if=/dev/zero of=/srv/mirrors/test.txt bs=1M count=1
-```
-
-### 6.3 联调测试用例
-
-按顺序执行以下测试，每个都要验证通过。
-
-#### 测试 1：非保护文件直接下载（无 token）
-
-```bash
-curl -i http://127.0.0.1/test.txt
-# 预期：200 OK，无 X-Pow-* 头
-```
-
-#### 测试 2：保护文件无 token（应限速放行）
-
-```bash
-time curl -o /dev/null http://127.0.0.1/test.iso
-# 预期：200 OK
-# 响应头含：X-Pow-Result: allow, X-Pow-Decision: unverified_slow, X-Pow-Limit-Rate: 512k
-# 下载耗时明显受限速影响（10MB 文件在 512k/s 下约 20 秒）
-```
-
-#### 测试 3：保护文件带非法 token（应 403）
-
-```bash
-curl -i "http://127.0.0.1/test.iso?token=invalid&sign=0000000000000000000000000000000000000000000000000000000000000000"
-# 预期：403 Forbidden
-# 响应头含：X-Pow-Result: deny, X-Pow-Error: malformed_token
-```
-
-#### 测试 4：直接访问后端 /verify_pow（应 403 或 200，不 500）
-
-```bash
-curl -i http://127.0.0.1:8080/verify_pow \
-  -H "X-Original-URI: /test.iso" \
-  -H "X-Original-Method: GET" \
-  -H "X-Original-Args: " \
-  -H "X-Real-IP: 127.0.0.1"
-# 预期：200（限速放行）或 403，取决于风控配置
-```
-
-#### 测试 5：生成合法 token 并全速下载
-
-用前端签发页面（见 §7）或脚本生成合法 token+sign，然后：
-
-```bash
-curl -i "http://127.0.0.1/test.iso?token=<合法token>&sign=<合法sign>"
-# 预期：200 OK
-# 响应头含：X-Pow-Result: allow, X-Pow-Decision: verified, X-Pow-Limit-Rate: 0
-# 下载速度明显快于测试 2
-```
-
-#### 测试 6：generic 链接超过使用次数
-
-重复用同一个合法 generic 链接下载，直到 `max_uses` 耗尽：
-
-```bash
-# 假设 max_uses=3，第 4 次应返回 403 used_up
-for i in 1 2 3 4; do
-  echo "=== attempt $i ==="
-  curl -s -o /dev/null -w "%{http_code} %{header_x-pow-error}\n" \
-    "http://127.0.0.1/test.iso?token=<合法token>&sign=<合法sign>"
-done
-# 预期：前 3 次 200，第 4 次 403 used_up
-```
-
-#### 测试 7：后端故障时 Nginx 行为
-
-```bash
-# 停掉后端
-sudo systemctl stop mirrors-waf-backend
-
-curl -i http://127.0.0.1/test.iso
-# 预期：503（@pow_backend_error），不是 502 或超时
-# Nginx auth_request 超时 2 秒后触发 error_page 500 502 503 504 = @pow_backend_error
-
-# 恢复后端
-sudo systemctl start mirrors-waf-backend
-```
-
-### 6.4 联调检查清单
-
-- [ ] 测试 1-7 全部通过
-- [ ] Nginx `access.log` 里能看到 auth_request 子请求
-- [ ] 后端日志里有对应的 `pow_verify` 结构化日志
-- [ ] `limit_rate` 变量正确传递（下载速度符合预期）
-- [ ] 后端故障时 Nginx 返回 503 而非 502
 
 ---
 
@@ -357,42 +237,11 @@ sudo cp deploy/frontend/* /srv/mirrors/static/pow/
 }
 ```
 
-**注意**：`salt` 和 `difficulty` 必须和后端 `config.yaml` 完全一致，否则生成的 token 无法通过验证。
+`salt` 和 `difficulty` 与后端 `config.yaml` 保持一致。
 
 ---
 
-## 8. 灰度上线策略
-
-**不要一次性全量上线。** 按以下阶段推进：
-
-### 阶段 1：限速档（观察期，1 周）
-
-- 后端启用，`pow.dry_run: true`
-- Nginx 配置所有大文件走 `auth_request`
-- 所有请求走"无 token 限速"档（512k）
-- 观察：
-  - 后端 QPS、延迟、错误率
-  - Nginx `auth_request` 超时次数
-  - 是否有正常用户被误拦
-
-### 阶段 2：PoW 加速档（灰度，1 周）
-
-- `pow.dry_run: false`
-- 部署前端签发页面
-- 引导部分用户通过 PoW 页面生成下载链接
-- 观察：
-  - PoW 验证成功率
-  - generic 链接使用次数分布
-  - 用户反馈
-
-### 阶段 3：全量
-
-- 确认无异常后全量开放
-- `pow.bypass_all: false`（确保关掉）
-
----
-
-## 9. 回滚
+## 8. 回滚
 
 ### 紧急放行（后端故障）
 
@@ -404,7 +253,7 @@ pow:
 sudo systemctl restart mirrors-waf-backend
 ```
 
-所有请求直接放行，绕过 PoW 和风控。**仅限紧急情况，恢复后立即关闭。**
+所有请求直接放行，绕过 PoW 和风控。
 
 ### 关闭风控
 
@@ -428,7 +277,7 @@ Nginx 配置移除 `auth_request`，直接走 `try_files`。后端可停掉。
 
 ---
 
-## 10. 监控
+## 9. 监控
 
 ### Prometheus 指标
 
@@ -451,9 +300,7 @@ Nginx 配置移除 `auth_request`，直接走 `try_files`。后端可停掉。
 
 ---
 
-## 11. 压测
-
-上线前在测试环境压测，确认单机容量。
+## 10. 压测
 
 ```bash
 # 安装 vegeta
@@ -474,9 +321,7 @@ vegeta report -type=text results.bin
 | 保护路径带非法 token | 98k | 10.2 µs | 3.8 KB/op |
 | 并发（24 核） | 583k | 1.7 µs | 2.8 KB/op |
 
-实测数据来自 `go test -tags=benchmark -bench=. ./internal/app/...`。
-
-Nginx `auth_request` 超时设 2 秒，单机 QPS 10 万级，远超任何镜像站 auth 子请求的实际负载。瓶颈通常不在后端而在 Nginx 到后端的网络往返——确保两者同机或低延迟互通。
+实测数据来自 `go test -tags=benchmark -bench=. ./internal/app/...`。远超镜像站 auth 子请求的实际负载；瓶颈通常在 Nginx 到后端的网络往返，两者应同机或低延迟互通。
 
 如果实测 QPS 低于基线 50%，检查：
 - 存储连接池配置
@@ -485,7 +330,7 @@ Nginx `auth_request` 超时设 2 秒，单机 QPS 10 万级，远超任何镜像
 
 ---
 
-## 12. 常见问题
+## 11. 常见问题
 
 ### Q: Nginx `limit_rate` 变量不生效？
 

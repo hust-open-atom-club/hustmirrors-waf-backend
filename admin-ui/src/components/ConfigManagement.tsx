@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, Check, FileCode2, RefreshCw, Settings2, Undo2, X } from 'lucide-react'
+import { AlertTriangle, Check, FileCode2, RefreshCw, Undo2, X } from 'lucide-react'
 import { AuthRequiredError, RPCError, rpc } from '../api'
 import type {
   AuthState,
@@ -313,14 +313,13 @@ export default function ConfigManagement({ auth, onError, onToast, refreshNonce 
 
   return <section className="config-management">
     <div className="config-status-grid" aria-label="配置状态">
-      <StatusCard label="MANAGED" value={managed ? 'YES' : 'NO'} tone={managed ? 'good' : 'danger'} detail={managed ? '配置源由控制面管理' : '当前配置源不可写'} />
-      <StatusCard label="CURRENT REVISION" value={currentRevision ? `#${currentRevision}` : '—'} detail="CAS 基准修订" />
-      <StatusCard label="PENDING RESTART" value={pendingRestart ? 'YES' : 'NO'} tone={pendingRestart ? 'warning' : 'good'} detail={pendingRestart ? '磁盘配置尚未载入运行时' : '没有待重启状态'} />
-      <StatusCard label="DRAFT" value={draft ? `r${draft.draft_revision}` : 'NONE'} tone={draft?.validated ? 'good' : draft ? 'warning' : undefined} detail={draft ? `base #${draft.base_revision} · ${draft.validated ? 'validated' : 'not validated'}` : '尚未保存草稿'} />
+      <StatusCard label="MANAGED" value={managed ? 'YES' : 'NO'} tone={managed ? 'good' : 'danger'} />
+      <StatusCard label="REVISION" value={currentRevision ? `#${currentRevision}` : '—'} />
+      <StatusCard label="PENDING RESTART" value={pendingRestart ? 'YES' : 'NO'} tone={pendingRestart ? 'warning' : 'good'} />
+      <StatusCard label="DRAFT" value={draft ? `r${draft.draft_revision}` : 'NONE'} tone={draft?.validated ? 'good' : draft ? 'warning' : undefined} />
     </div>
 
     <div className="panel capability-strip">
-      <div><Settings2 size={18} /><span><strong>能力开关</strong></span></div>
       <div className="capability-list">
         <CapabilityBadge label="MANAGED" enabled={capabilities.managed} />
         <CapabilityBadge label="MUTATIONS" enabled={capabilities.mutations_enabled} />
@@ -330,13 +329,12 @@ export default function ConfigManagement({ auth, onError, onToast, refreshNonce 
     </div>
 
     {notice && <div className="config-notice" role="alert"><AlertTriangle size={17} /><span>{notice}</span><button type="button" onClick={() => setNotice('')} aria-label="关闭提示"><X size={15} /></button></div>}
-    {!canEdit && <div className="config-readonly-note"><AlertTriangle size={17} /><div><strong>配置写操作不可用</strong><span>检查 managed、mutations、认证方式和 config management 开关。</span></div></div>}
+    {!canEdit && <div className="config-readonly-note"><AlertTriangle size={17} /><strong>只读模式</strong></div>}
 
     <div className="config-workspace">
       <div className="panel config-editor-panel">
-        <div className="panel-header"><div><span>EDITABLE YAML · REDACTED</span><h2>配置草稿</h2></div><div className="editor-state"><span className={editorDirty ? 'dirty' : draft?.validated ? 'valid' : ''} />{editorDirty ? 'UNSAVED' : draft?.validated ? 'VALIDATED' : draft ? 'SAVED' : 'CURRENT'}</div></div>
+        <div className="panel-header"><h2>配置草稿</h2><div className="editor-state"><span className={editorDirty ? 'dirty' : draft?.validated ? 'valid' : ''} />{editorDirty ? 'UNSAVED' : draft?.validated ? 'VALIDATED' : draft ? 'SAVED' : 'CURRENT'}</div></div>
         <VisualConfigEditor yamlText={yaml} disabled={!canEdit} onChange={(next) => { setYaml(next); setValidation(null); setDiff(null); setNotice('') }} />
-        <p className="editor-help" id="config-editor-help">敏感值以占位符保留，服务端会在保存时合并真实值。草稿只保存在服务端和当前页面内存。</p>
         <div className="config-actions">
           <button type="button" className="secondary-button" onClick={() => void refreshState()} disabled={busy}><RefreshCw size={16} className={operation === 'confirm' ? 'spin' : ''} /> 刷新状态</button>
           <button type="button" className="secondary-button" onClick={() => void saveDraft()} disabled={!canEdit || !yaml.trim() || busy}><FileCode2 size={16} /> 保存草稿</button>
@@ -348,26 +346,26 @@ export default function ConfigManagement({ auth, onError, onToast, refreshNonce 
       </div>
 
       <div className="panel config-diff-panel">
-        <div className="panel-header"><div><span>PREVIEW · EXPIRES IN 10 MIN</span><h2>差异预览</h2></div>{diff && <DangerBadge danger={diff.danger} />}</div>
+        <div className="panel-header"><h2>差异预览</h2>{diff && <DangerBadge danger={diff.danger} />}</div>
         {diff ? <>
           <DiffSummary diff={diff} />
           <DiffChanges diff={diff} />
-          <div className="diff-actions"><button type="button" className={diff.danger === 'normal' ? 'primary-button' : 'danger-button'} onClick={openApplyConfirmation} disabled={!diff.preview_id || diff.changes.length === 0 || editorDirty || busy}><Check size={16} /> Apply（二次确认）</button></div>
-        </> : <div className="config-empty"><FileCode2 size={24} /><strong>尚未生成差异</strong><p>保存并校验草稿后生成 Diff，确认将要写入的字段和重启影响。</p></div>}
+          <div className="diff-actions"><button type="button" className={diff.danger === 'normal' ? 'primary-button' : 'danger-button'} onClick={openApplyConfirmation} disabled={!diff.preview_id || diff.changes.length === 0 || editorDirty || busy}><Check size={16} /> Apply</button></div>
+        </> : <div className="config-empty"><strong>尚未生成差异</strong></div>}
       </div>
     </div>
 
     <div className="panel config-history-panel">
-      <div className="panel-header"><div><span>REVISION LOG · LATEST 50</span><h2>配置历史</h2></div><span className={`source-badge ${capabilities.history_enabled ? 'good' : 'muted'}`}>{history.length} ENTRIES</span></div>
-      {history.length === 0 ? <div className="config-empty"><Undo2 size={24} /><strong>没有配置历史</strong><p>托管配置首次初始化或应用后会在此显示修订记录。</p></div> : <div className="data-table-wrap"><table className="config-history-table"><thead><tr><th>修订</th><th>时间 / 动作</th><th>变更</th><th>操作者 / 原因</th><th>影响</th><th>操作</th></tr></thead><tbody>{history.map((entry) => <tr key={entry.revision}><td><strong>#{entry.revision}</strong><small className="table-subtext">parent #{entry.parent_revision || '—'}</small></td><td><strong>{entry.action.toUpperCase()}</strong><small className="table-subtext">{formatDate(entry.created_at)}</small></td><td>{entry.changed}</td><td>{entry.actor || '—'}<small className="table-subtext" title={entry.reason}>{entry.reason || (entry.rollback_target ? `rollback → #${entry.rollback_target}` : '—')}</small></td><td><DangerBadge danger={entry.danger || 'normal'} />{entry.restart_required && <small className="restart-label">RESTART</small>}</td><td><button type="button" className="table-action" disabled={!capabilities.apply_enabled || entry.revision === currentRevision || busy} onClick={() => void previewRollback(entry)}><Undo2 size={13} /> 回滚预览</button></td></tr>)}</tbody></table></div>}
+      <div className="panel-header"><h2>配置历史</h2><span className={`source-badge ${capabilities.history_enabled ? 'good' : 'muted'}`}>{history.length}</span></div>
+      {history.length === 0 ? <div className="config-empty"><strong>暂无记录</strong></div> : <div className="data-table-wrap"><table className="config-history-table"><thead><tr><th>修订</th><th>时间 / 动作</th><th>变更</th><th>操作者 / 原因</th><th>影响</th><th>操作</th></tr></thead><tbody>{history.map((entry) => <tr key={entry.revision}><td><strong>#{entry.revision}</strong><small className="table-subtext">parent #{entry.parent_revision || '—'}</small></td><td><strong>{entry.action.toUpperCase()}</strong><small className="table-subtext">{formatDate(entry.created_at)}</small></td><td>{entry.changed}</td><td>{entry.actor || '—'}<small className="table-subtext" title={entry.reason}>{entry.reason || (entry.rollback_target ? `rollback → #${entry.rollback_target}` : '—')}</small></td><td><DangerBadge danger={entry.danger || 'normal'} />{entry.restart_required && <small className="restart-label">RESTART</small>}</td><td><button type="button" className="table-action" disabled={!capabilities.apply_enabled || entry.revision === currentRevision || busy} onClick={() => void previewRollback(entry)}><Undo2 size={13} /> 回滚</button></td></tr>)}</tbody></table></div>}
     </div>
 
     {confirmation && <ConfirmationModal confirmation={confirmation} submitting={operation === 'confirm'} onSubmit={(reason, phrase) => void submitConfirmation(reason, phrase)} onClose={() => setConfirmation(null)} />}
   </section>
 }
 
-function StatusCard({ label, value, detail, tone }: { label: string; value: string; detail: string; tone?: 'good' | 'warning' | 'danger' }) {
-  return <article className={`config-status-card ${tone ? `is-${tone}` : ''}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>
+function StatusCard({ label, value, tone }: { label: string; value: string; tone?: 'good' | 'warning' | 'danger' }) {
+  return <article className={`config-status-card ${tone ? `is-${tone}` : ''}`}><span>{label}</span><strong>{value}</strong></article>
 }
 
 function CapabilityBadge({ label, enabled }: { label: string; enabled: boolean }) {
@@ -405,5 +403,5 @@ function ConfirmationModal({ confirmation, submitting, onSubmit, onClose }: {
   const phraseRequired = Boolean(confirmation.diff.confirmation_phrase)
   const reasonRequired = rollback || confirmation.diff.danger !== 'normal'
   const ready = acknowledged && (!reasonRequired || reason.trim().length > 0) && (!phraseRequired || phrase === confirmation.diff.confirmation_phrase)
-  return <div className="modal-scrim"><section className="auth-modal config-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="config-confirm-title"><button type="button" className="modal-close icon-button" aria-label="关闭" onClick={onClose} disabled={submitting}><X size={18} /></button><div className="auth-icon danger-icon"><AlertTriangle size={22} /></div><span className="eyebrow">CONFIG / SECOND CONFIRMATION</span><h2 id="config-confirm-title">{rollback ? `确认回滚到 revision ${confirmation.target.revision}` : '确认应用配置草稿'}</h2><p>该预览基于 revision {confirmation.diff.base_revision}，包含 {confirmation.diff.changes.length} 项变化{confirmation.diff.restart_required ? '，写入后需要重启服务' : ''}。</p><DiffSummary diff={confirmation.diff} /><div className="confirmation-diff"><DiffChanges diff={confirmation.diff} /></div><label className="field"><span>操作原因{reasonRequired ? '（必填）' : '（可选）'}</span><input value={reason} maxLength={256} autoFocus placeholder={rollback ? '说明回滚原因' : '说明本次配置变更'} onChange={(event) => setReason(event.target.value)} /></label>{phraseRequired && <><div className="confirmation-phrase"><span>请输入确认短语</span><code>{confirmation.diff.confirmation_phrase}</code></div><label className="field"><span>CONFIRMATION PHRASE</span><input value={phrase} autoComplete="off" spellCheck={false} placeholder="严格区分大小写" onChange={(event) => setPhrase(event.target.value)} /></label></>}<label className="check-field confirmation-check"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /> 我已检查差异并确认执行此操作</label><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose} disabled={submitting}>取消</button><button type="button" className="danger-button" onClick={() => onSubmit(reason.trim(), phrase)} disabled={!ready || submitting}>{submitting ? <RefreshCw size={16} className="spin" /> : rollback ? <Undo2 size={16} /> : <Check size={16} />} {rollback ? '确认回滚' : '确认 Apply'}</button></div></section></div>
+  return <div className="modal-scrim"><section className="auth-modal config-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="config-confirm-title"><button type="button" className="modal-close icon-button" aria-label="关闭" onClick={onClose} disabled={submitting}><X size={18} /></button><h2 id="config-confirm-title">{rollback ? `回滚到 revision ${confirmation.target.revision}` : '应用配置草稿'}</h2><p>基于 revision {confirmation.diff.base_revision}，{confirmation.diff.changes.length} 项变化{confirmation.diff.restart_required ? '，需重启生效' : ''}。</p><DiffSummary diff={confirmation.diff} /><div className="confirmation-diff"><DiffChanges diff={confirmation.diff} /></div><label className="field"><span>原因{reasonRequired ? '（必填）' : ''}</span><input value={reason} maxLength={256} autoFocus onChange={(event) => setReason(event.target.value)} /></label>{phraseRequired && <><div className="confirmation-phrase"><span>确认短语</span><code>{confirmation.diff.confirmation_phrase}</code></div><label className="field"><span>PHRASE</span><input value={phrase} autoComplete="off" spellCheck={false} onChange={(event) => setPhrase(event.target.value)} /></label></>}<label className="check-field confirmation-check"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /> 确认执行</label><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose} disabled={submitting}>取消</button><button type="button" className="danger-button" onClick={() => onSubmit(reason.trim(), phrase)} disabled={!ready || submitting}>{submitting ? <RefreshCw size={16} className="spin" /> : rollback ? <Undo2 size={16} /> : <Check size={16} />} {rollback ? '确认回滚' : '确认 Apply'}</button></div></section></div>
 }
