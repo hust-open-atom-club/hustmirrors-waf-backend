@@ -117,34 +117,6 @@ func (s *Server) healthz(c echov4.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// whoami tells the caller what IP this service sees, so the PoW page can
-// mint ip_bound tokens without a third-party lookup that might report a
-// different address (dual-stack, alternate egress).
-//
-// Reads X-Real-IP only, matching verifyPow. Falling back to
-// X-Forwarded-For would hand the client a plausible IP that /verify_pow
-// then rejects — better that both endpoints fail the same way.
-//
-// no-store because a cached IP produces ip_mismatch denials.
-func (s *Server) whoami(c echov4.Context) error {
-	h := c.Response().Header()
-	h.Set("Cache-Control", "no-store")
-
-	ip := c.Request().Header.Get("X-Real-IP")
-	if ip == "" {
-		if s.logger != nil {
-			s.logger.Error(c.Request().Context(),
-				"X-Real-IP is empty on /whoami; ip_bound tokens cannot be minted or verified. "+
-					"Check that Nginx sets proxy_set_header X-Real-IP on both the /whoami "+
-					"and auth_request locations")
-		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "missing_real_ip",
-		})
-	}
-	return c.JSON(http.StatusOK, map[string]string{"ip": ip})
-}
-
 func (s *Server) readyz(c echov4.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "storage": "ok"})
 }

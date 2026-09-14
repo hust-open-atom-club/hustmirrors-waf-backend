@@ -2,8 +2,8 @@ package auth
 
 // AuthRequest carries the per-request data extracted from Nginx headers.
 //
-// No ForwardedFor field on purpose: IP decisions run on RealIP alone, and a
-// second IP source here would invite a caller to disagree with /whoami.
+// No ForwardedFor field on purpose: IP decisions run on RealIP alone;
+// a second IP source would only invite disagreements with verification.
 type AuthRequest struct {
 	OriginalURI    string
 	OriginalMethod string

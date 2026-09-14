@@ -105,48 +105,6 @@ func TestServer_Readyz(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
-func TestServer_Whoami(t *testing.T) {
-	// /whoami must resolve the IP exactly as /verify_pow does, i.e. from
-	// X-Real-IP alone. Falling back to X-Forwarded-For or RemoteAddr would
-	// let a client mint an ip_bound token from an address verification
-	// never sees, turning a proxy misconfiguration into an unexplained
-	// denial later.
-	t.Run("returns X-Real-IP", func(t *testing.T) {
-		s := NewMain(MainOptions{Config: &config.Config{}, Logger: logging.NewNop()})
-		req := httptest.NewRequest(http.MethodGet, "/whoami", nil)
-		req.Header.Set("X-Real-IP", "203.0.113.7")
-		req.Header.Set("X-Forwarded-For", "198.51.100.1")
-		req.RemoteAddr = "192.0.2.1:1234"
-
-		rec := httptest.NewRecorder()
-		s.Echo().ServeHTTP(rec, req)
-
-		assert.Equal(t, http.StatusOK, rec.Code)
-		assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
-		var body map[string]string
-		require.NoError(t, json.NewDecoder(rec.Body).Decode(&body))
-		assert.Equal(t, "203.0.113.7", body["ip"])
-	})
-
-	t.Run("fails when X-Real-IP is absent", func(t *testing.T) {
-		s := NewMain(MainOptions{Config: &config.Config{}, Logger: logging.NewNop()})
-		req := httptest.NewRequest(http.MethodGet, "/whoami", nil)
-		// Present but deliberately ignored: these are what a fallback would
-		// have used.
-		req.Header.Set("X-Forwarded-For", "198.51.100.1")
-		req.RemoteAddr = "192.0.2.1:1234"
-
-		rec := httptest.NewRecorder()
-		s.Echo().ServeHTTP(rec, req)
-
-		assert.Equal(t, http.StatusInternalServerError, rec.Code,
-			"a missing X-Real-IP must surface here rather than at verify time")
-		var body map[string]string
-		require.NoError(t, json.NewDecoder(rec.Body).Decode(&body))
-		assert.Equal(t, "missing_real_ip", body["error"])
-		assert.Empty(t, body["ip"])
-	})
-}
 
 func TestServer_Admin_Ping_NoneAuth(t *testing.T) {
 	cfg := &config.Config{}

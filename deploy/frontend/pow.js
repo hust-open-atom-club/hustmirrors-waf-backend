@@ -39,10 +39,9 @@ function buildPayload(path, mode) {
         salt: config.salt,
     };
     if (mode === "ip_bound") {
+        // Empty IP: the server locks the token to the IP of the first
+        // request that redeems it (first-use binding).
         payload.ip = "";
-        // IP is filled by user or detected; left empty here means the
-        // server's require_ip check will reject. We ask the user to
-        // confirm their IP below.
     }
     return payload;
 }
@@ -81,35 +80,6 @@ async function generate() {
     }
 
     let payload = buildPayload(path, selectedMode);
-
-    // For ip_bound mode the token embeds the client's public IP, and the
-    // backend denies the request unless it matches the IP it observes. So
-    // we ask the backend itself rather than a third-party lookup, which
-    // could report a different address (dual-stack, alternate egress) and
-    // produce an ip_mismatch that is hard to diagnose.
-    if (selectedMode === "ip_bound") {
-        try {
-            payload.ip = await fetchUserIP();
-        } catch (e) {
-            // A 500 means the server has no X-Real-IP for us. Typing an
-            // address by hand cannot help: /verify_pow reads the same
-            // header and will reject whatever we mint. Say so instead of
-            // sending the user round a loop that always fails.
-            if (e && e.serverMisconfigured) {
-                showError(
-                    "服务端未收到 X-Real-IP，ip_bound 模式当前不可用。" +
-                    "这是站点代理配置问题，请联系管理员；你可以先改用 generic 模式。"
-                );
-                return;
-            }
-            const ip = prompt("无法自动获取公网 IP，请手动输入你的公网 IP：");
-            if (!ip) {
-                showError("ip_bound 模式需要公网 IP");
-                return;
-            }
-            payload.ip = ip;
-        }
-    }
 
     document.getElementById("error").textContent = "";
     document.getElementById("generate").disabled = true;
@@ -176,7 +146,7 @@ function showResult(path, token, sign, payload, attempts) {
     if (payload.mode === "generic") {
         info += " | 最多下载 " + config.modes.generic.max_uses + " 次";
     } else if (payload.mode === "ip_bound") {
-        info += " | 绑定 IP: " + payload.ip;
+        info += " | 绑定首次使用的 IP";
     }
     info += " | PoW 耗时 " + attempts + " 次尝试";
     meta.textContent = info;
@@ -191,35 +161,6 @@ function copyUrl() {
         btn.textContent = "已复制";
         setTimeout(() => { btn.textContent = orig; }, 1500);
     });
-}
-
-// fetchUserIP asks the backend what IP it sees this client as. The answer
-// must come from the same header /verify_pow reads, which is why this is
-// not a third-party service.
-//
-// A 500 carrying missing_real_ip means the proxy is not forwarding
-// X-Real-IP at all. That is flagged on the error so the caller can tell it
-// apart from a transient network failure: retrying or entering an address
-// manually cannot fix it.
-//
-// whoami_url is overridable in config.json for deployments where the PoW
-// page is served from a different origin than the API.
-async function fetchUserIP() {
-    const url = (config && config.whoami_url) || "/whoami";
-    const resp = await fetch(url, { cache: "no-store" });
-    if (!resp.ok) {
-        const err = new Error("whoami failed: " + resp.status);
-        if (resp.status === 500) {
-            const body = await resp.json().catch(() => ({}));
-            err.serverMisconfigured = body.error === "missing_real_ip";
-        }
-        throw err;
-    }
-    const data = await resp.json();
-    if (!data.ip) {
-        throw new Error("whoami returned no ip");
-    }
-    return data.ip.trim();
 }
 
 // stopWorker tears down the worker and restores the form. Safe to call

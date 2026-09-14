@@ -144,12 +144,7 @@ curl http://127.0.0.1:8080/healthz
 
 curl http://127.0.0.1:8080/readyz
 # {"status":"ok","storage":"ok"}
-
-curl -i http://127.0.0.1:8080/whoami -H "X-Real-IP: 1.2.3.4"
-# {"ip":"1.2.3.4"}
 ```
-
-`/whoami` 返回后端看到的客户端 IP（只读 `X-Real-IP`，缺失返回 500），供 PoW 页面生成 `ip_bound` token。
 
 ### 验证鉴权
 
