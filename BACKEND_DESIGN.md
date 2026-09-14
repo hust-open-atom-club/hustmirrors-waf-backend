@@ -10,8 +10,6 @@
 > 核心 URL 参数：`token` + `sign`  
 > 支持两种模式：A. 绑定 IP 长效模式；B. 通用链接短效模式
 
----
-
 ## 1. 文档说明
 
 本设计文档聚焦 PoW 验证后端，不包含完整前端页面设计，也不包含镜像站文件同步系统设计。
@@ -25,8 +23,6 @@ Nginx 大文件下载鉴权服务
 也就是说，后端只判断请求是否允许下载，不负责真实文件传输。
 
 真实大文件仍由 Nginx 或其后端文件服务发送。
-
----
 
 ## 2. 参考流程图抽象后的后端模型
 
@@ -65,8 +61,6 @@ Nginx 大文件下载鉴权服务
 5. 绑定 IP 模式主要校验请求 IP，不强制记录使用次数，但仍建议记录审计日志；
 6. Nginx 使用 `auth_request` 将原始 URI 和真实 IP 传给后端；
 7. 后端返回 `HTTP 200` 表示放行，返回 `HTTP 403` 表示拒绝。
-
----
 
 ## 3. 后端目标
 
@@ -124,8 +118,6 @@ Nginx 大文件下载鉴权服务
 5. 替代全站流量监控、防火墙、限速系统；
 6. 为每个用户保存长期会话。
 
----
-
 ## 4. 技术栈选型
 
 ### 4.1 HTTP 框架
@@ -175,8 +167,6 @@ Echo
 ```text
 Echo + Viper + Zap + sqlx + PostgreSQL + Redis
 ```
-
----
 
 ## 5. 总体架构
 
@@ -232,8 +222,6 @@ sequenceDiagram
         Nginx-->>User: 返回验证引导页
     end
 ```
-
----
 
 ## 6. 两种链接模式设计
 
@@ -325,8 +313,6 @@ generic
 | 用户体验 | 稳定网络下较好 | 对无头环境更友好 |
 | 防泄漏能力 | 较强 | 依赖短有效期和次数限制 |
 
----
-
 ## 7. URL 参数协议
 
 ### 7.1 最终下载 URL 形式
@@ -370,8 +356,6 @@ https://mirrors.example.edu/ubuntu.iso?token=eyJ2IjoxLCJtb2RlIjoiZ2VuZXJpYyIsInB
 2. 后端会重新计算 sign；
 3. 攻击者修改 token 后，必须重新完成 PoW；
 4. 后端会限制 TTL、难度、路径、模式和使用次数。
-
----
 
 ## 8. Token Payload 设计
 
@@ -462,8 +446,6 @@ https://mirrors.example.edu/ubuntu.iso?token=eyJ2IjoxLCJtb2RlIjoiZ2VuZXJpYyIsInB
 | `cnt` | 长度 1-64，只允许十六进制或 Base64URL 安全集 |
 | `ip` | 仅 `ip_bound` 必填，必须是合法 IP 字符串 |
 | `salt` | 如启用 salt，则必须是当前或上一期允许 salt |
-
----
 
 ## 9. PoW 签名字符串设计
 
@@ -558,8 +540,6 @@ sign 对应的哈希前 d 个 bit 全为 0
 
 1. 计算出的 hash hex 是否等于 URL 中的 `sign`；
 2. hash 是否满足前导零 bit 难度。
-
----
 
 ## 10. 后端验证流程
 
@@ -675,8 +655,6 @@ func VerifyPow(ctx context.Context, req AuthRequest) AuthResult {
 }
 ```
 
----
-
 ## 11. HTTP API 设计
 
 ### 11.1 鉴权接口
@@ -766,8 +744,6 @@ GET /readyz
 }
 ```
 
----
-
 ## 12. Nginx 接入设计
 
 ### 12.1 推荐配置
@@ -856,8 +832,6 @@ real_ip_recursive on;
 ```
 
 否则绑定 IP 模式可能因为后端拿到的是代理 IP 而无法使用。
-
----
 
 ## 13. 存储设计
 
@@ -1064,8 +1038,6 @@ map[sign_id]*UsageRecord + mutex
 | 鉴权访问日志 (谁下载了什么) | 高频写入，需长期审计 | PostgreSQL | 异步写入，可批量 |
 | 管理操作审计日志 (谁改了规则) | 低频写入，高安全要求 | PostgreSQL | 必须持久化 |
 | 规则配置版本快照 | 低频写入 | PostgreSQL | 便于回滚 |
-
----
 
 ## 14. 配置设计
 
@@ -1274,8 +1246,6 @@ cleanup:
 9. 如果启用 `risk_control`，必须校验 chain、rule、target、counter 配置合法；
 10. 如果启用 `admin`，必须校验监听地址、鉴权方式、allow_cidrs 和 token_file。
 
----
-
 ## 15. Go 项目结构设计
 
 ```text
@@ -1368,8 +1338,6 @@ transport/echo -> auth / admin -> pow / matcher / risk / storage
 7. `storage` 只负责使用次数和风控计数器存储；
 8. 核心模块不依赖 Echo。
 
----
-
 ## 16. 核心数据结构
 
 ### 16.1 AuthRequest
@@ -1417,8 +1385,6 @@ type AuthResult struct {
 }
 ```
 
----
-
 ## 17. 错误码设计
 
 | Reason | HTTP 状态 | 说明 |
@@ -1454,8 +1420,6 @@ type AuthResult struct {
 | `rate_limited` | 429 | 被限流 |
 | `storage_error` | 500 | 存储异常 |
 | `internal_error` | 500 | 未知错误 |
-
----
 
 ## 18. 风控规则引擎设计
 
@@ -2266,8 +2230,6 @@ internal/transport/echo/admin_handlers.go
 
 完整规则编辑和 Web 页面可作为后续增强。
 
----
-
 ## 19. 日志设计
 
 ### 19.1 结构化日志示例
@@ -2322,8 +2284,6 @@ logging:
 ```text
 sha256(ip + log_salt)
 ```
-
----
 
 ## 20. 安全设计
 
@@ -2419,8 +2379,6 @@ pow:
 
 用于后端故障或误拦截时临时放行。
 
----
-
 ## 21. Dry-run 设计
 
 ### 21.1 用途
@@ -2448,8 +2406,6 @@ X-Pow-Result: allow
 X-Pow-Reason: dry_run_allow
 X-Pow-Dry-Run-Original-Error: missing_token_or_sign
 ```
-
----
 
 ## 22. HEAD 与 Range 请求
 
@@ -2488,8 +2444,6 @@ pow:
 2. 同一 sign；
 3. 短时间内多个 Range 请求；
 4. 合并计为一次使用。
-
----
 
 ## 23. 测试方案
 
@@ -2565,8 +2519,6 @@ generic.max_uses: 3
 最多 3 次返回 200，其余返回 403 used_up
 ```
 
----
-
 ## 24. 开发里程碑
 
 ### 24.1 第一阶段：最小可用版本
@@ -2610,8 +2562,6 @@ generic.max_uses: 3
 5. 动态难度策略；
 6. 与流量监控联动。
 
----
-
 ## 25. 后端验收标准
 
 ### 25.1 功能验收
@@ -2643,8 +2593,6 @@ generic.max_uses: 3
 6. 提供 Nginx 配置；
 7. 提供本地启动说明；
 8. 支持 dry-run 和 bypass。
-
----
 
 ## 26. 无头环境兼容与安全权衡方案
 

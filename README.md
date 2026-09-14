@@ -6,8 +6,6 @@
 [![Echo](https://img.shields.io/badge/Echo-v4-00ADD8)](https://echo.labstack.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
----
-
 ## 工作原理
 
 ### 架构总览
@@ -119,8 +117,6 @@ X-Pow-Trace: INPUT:missing-pow>RISK_CHECK,RISK_CHECK:too-many-1h
 >
 > `risk_control.pending` 限制同一 IP 并发的受保护鉴权请求数，超过 `max_per_ip` 返回 429 并阻断 `block_ttl`。状态仅在单进程内，多副本不共享。
 
----
-
 ## 快速开始
 
 ### 构建
@@ -185,8 +181,6 @@ curl -i http://127.0.0.1:8080/verify_pow \
 # X-Pow-Limit-Rate: 512k
 ```
 
----
-
 ## Nginx 接入
 
 完整配置见 [`deploy/nginx/mirrors-waf.conf`](deploy/nginx/mirrors-waf.conf)，核心部分：
@@ -194,8 +188,8 @@ curl -i http://127.0.0.1:8080/verify_pow \
 ```nginx
 location ~* \.(iso|img|qcow2|zip|7z|tar|tar\.gz|tar\.xz)$ {
     auth_request /_pow_auth;
-    auth_request_set $pow_limit_rate $upstream_http_x_pow_limit_rate;
-    limit_rate $pow_limit_rate;
+    auth_request_set $pow_limit_bytes $upstream_http_x_pow_limit_rate_bytes;
+    limit_rate $pow_limit_bytes;
     # ...
 }
 
@@ -203,15 +197,13 @@ location = /_pow_auth {
     internal;
     proxy_pass http://127.0.0.1:8080/verify_pow;
     proxy_pass_request_body off;
-    proxy_set_header X-Original-URI    $uri;
-    proxy_set_header X-Original-Args   $args;
+    proxy_set_header X-Original-URI    $original_path;
+    proxy_set_header X-Original-Args   $original_args;
     proxy_set_header X-Real-IP         $remote_addr;
     proxy_set_header X-Original-Range  $http_range;
     # ...
 }
 ```
-
----
 
 ## 生成 PoW 下载链接
 
@@ -242,8 +234,6 @@ sign = solve_pow(payload, 22)
 token = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
 print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 ```
-
----
 
 ## 配置
 
@@ -293,8 +283,6 @@ MIRRORS_WAF_POW__DRY_RUN=true
 MIRRORS_WAF_STORAGE__DRIVER=postgres
 ```
 
----
-
 ## 项目结构
 
 ```
@@ -320,8 +308,6 @@ MIRRORS_WAF_STORAGE__DRIVER=postgres
     └── observability/       # 告警 + Grafana
 ```
 
----
-
 ## 部署
 
 ### systemd
@@ -339,8 +325,6 @@ sudo systemctl enable --now mirrors-waf-backend
 createdb mirrors_pow
 make migrate-up
 ```
-
----
 
 ## 测试
 
@@ -363,8 +347,6 @@ go test -tags=benchmark -bench=. ./internal/app/...  # 压测
 | 非保护路径 | 209k |
 | 保护路径无 token | 114k |
 | 非法 token | 98k |
-
----
 
 ## 许可证
 

@@ -2,8 +2,6 @@
 
 本文档覆盖从本地构建到生产上线的完整流程。按顺序执行。
 
----
-
 ## 1. 前置条件
 
 | 组件 | 版本要求 | 说明 |
@@ -13,8 +11,6 @@
 | PostgreSQL | 14+ | 可选，`storage.driver: postgres` 时需要 |
 | Redis | 6+ | 可选，`storage.counter_driver: redis` 或 `storage.driver: redis` 时需要 |
 | goose | v3 | 数据库迁移工具 |
-
----
 
 ## 2. 构建
 
@@ -32,8 +28,6 @@ make build
 ```bash
 VERSION=v1.0.0 COMMIT=$(git rev-parse --short HEAD) make build
 ```
-
----
 
 ## 3. 配置
 
@@ -59,8 +53,6 @@ MIRRORS_WAF_STORAGE__DRIVER=postgres
 MIRRORS_WAF_POW__PUBLIC_SALT=prod-salt-2025
 ```
 
----
-
 ## 4. 数据库迁移（使用 PostgreSQL 时）
 
 ```bash
@@ -78,8 +70,6 @@ make migrate-up
 - `pow_usage`：generic 模式使用记录
 - `risk_counter`：风控计数器快照
 - `admin_audit_log`：管理操作审计
-
----
 
 ## 5. 启动
 
@@ -120,7 +110,6 @@ openssl rand -hex 32 > deploy/docker/secrets/admin.token
 - Admin 使用 `/run/secrets/admin.token`
 - `mutations_enabled` 和 `config_management.enabled` 默认关闭
 - Prometheus/Loki 未配置时后台对应模块显示降级状态
-
 
 #### 3. 构建并启动
 
@@ -171,8 +160,6 @@ admin:
     loki_url: "http://loki:3100"
 ```
 
----
-
 ### systemd 托管
 
 ```bash
@@ -193,8 +180,6 @@ sudo systemctl status mirrors-waf-backend
 journalctl -u mirrors-waf-backend -f
 ```
 
----
-
 ## 6. Nginx 联调
 
 ```bash
@@ -203,8 +188,6 @@ sudo cp deploy/nginx/mirrors-waf.conf /etc/nginx/conf.d/
 sudo nginx -t
 sudo systemctl reload nginx
 ```
-
----
 
 ## 7. 回滚
 
@@ -240,8 +223,6 @@ deny 改写为 allow，所有请求走限速档。
 
 Nginx 配置移除 `auth_request`，直接走 `try_files`。后端可停掉。
 
----
-
 ## 8. 监控
 
 ### Prometheus 指标
@@ -262,8 +243,6 @@ Nginx 配置移除 `auth_request`，直接走 `try_files`。后端可停掉。
 ### 告警规则
 
 见 `deploy/observability/alerts.yml`，配 Prometheus Alertmanager。
-
----
 
 ## 9. 压测
 
@@ -293,13 +272,11 @@ vegeta report -type=text results.bin
 - Nginx `auth_request` 超时设置
 - 后端 GOMAXPROCS
 
----
-
 ## 10. 常见问题
 
 ### Q: Nginx `limit_rate` 变量不生效？
 
-A: 检查 Nginx 版本 >= 1.18，且变量非空。`${pow_limit_rate:-0}` 语法需要 Nginx 1.18+。空值会导致 `limit_rate` 不生效（无限速）。
+A: 用 `X-Pow-Limit-Rate-Bytes`（纯字节数，后端对空值统一输出 `0`），`limit_rate` 需要数字值，`512k` 这类形式会被视为无效。
 
 ### Q: 后端日志报 `storage_error`？
 
@@ -311,11 +288,11 @@ A: 查后端日志，按 `request_id` 过滤。常见原因：
 - token 过期（`expired`）
 - 使用次数耗尽（`used_up`）
 - IP 不匹配（`ip_mismatch`，ip_bound 模式）
-- PoW 难度不足（`difficulty_not_met`，前端 config.json 和后端配置不一致）
+- PoW 难度不足（`difficulty_not_met`，签发方与后端配置不一致）
 
 ### Q: 前端生成的 token 后端不认？
 
-A: 99% 是 `config.json` 和后端 `config.yaml` 的 `salt` / `difficulty` 不一致。对比两边的值。
+A: 通常是签发方和后端 `config.yaml` 的 `salt` / `difficulty` 不一致。对比两边的值。
 
 ### Q: generic 链接用了一次就 used_up？
 
