@@ -1,6 +1,7 @@
 # mirrors-waf-backend
 
-> 基于 PoW 的镜像站大文件防盗刷后端，作为 Nginx `auth_request` 下游鉴权服务。
+> 镜像站大文件防盗刷：无 token 限速下载，算一次 PoW 换全速。
+> Nginx `auth_request` 下游鉴权服务，token 携带在 URL 中——wget/curl 直接可用，无 Cookie/Session。
 
 [![Go](https://img.shields.io/badge/Go-1.24+-00ADD8)](https://go.dev/)
 [![Echo](https://img.shields.io/badge/Echo-v4-00ADD8)](https://echo.labstack.com/)
@@ -326,17 +327,23 @@ createdb mirrors_pow
 make migrate-up
 ```
 
-## 测试
+## 开发
 
 ```bash
-make test          # 单元测试
-make test-race     # race detector（需 CGO，Windows 上需装 gcc）
-make coverage      # 生成 coverage.out 并输出覆盖率汇总
+make build          # 编译（首次自动构建前端并嵌入）
+make build-all      # 前端 + 后端
+make test           # 单元测试
+make test-race      # race detector（需 CGO，Windows 上需装 gcc）
+make coverage       # 覆盖率
+make admin-ui-check # 管理后台前端类型检查
+make lint           # golangci-lint（未安装时退回 go vet）
 
 # PostgreSQL 真实集成测试（使用独立 schema，不会删除数据库中的其他表）
 POSTGRES_TEST_DSN='postgres://user:pass@127.0.0.1:5432/mirrors_pow?sslmode=disable' make test-postgres
 go test -tags=benchmark -bench=. ./internal/app/...  # 压测
 ```
+
+管理后台前端在 `admin-ui/`（React + Vite），构建产物经 go:embed 嵌入二进制，改动后跑 `make build-all` 重新嵌入。
 
 `make coverage` 用 `-coverpkg=./...` 把全仓生产代码纳入统计。PostgreSQL 集成测试需要设置 `POSTGRES_TEST_DSN`，否则跳过。
 
