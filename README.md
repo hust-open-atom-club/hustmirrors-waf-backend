@@ -238,7 +238,7 @@ def solve_pow(payload, difficulty):
 payload = {
     "v": 1, "mode": "generic", "alg": "sha256", "path": "/ubuntu.iso",
     "ts": int(time.time()), "exp": int(time.time()) + 1800,
-    "d": 22, "cnt": "", "salt": "2025-demo-salt",
+    "d": 22, "cnt": "", "salt": "test",
 }
 sign = solve_pow(payload, 22)
 token = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
@@ -253,7 +253,7 @@ print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 
 | 字段 | 默认值 | 说明 |
 |---|---|---|
-| `server.listen` | `127.0.0.1:8080` | 监听地址（不要暴露公网） |
+| `server.listen` | `127.0.0.1:8080` | 监听地址 |
 | `pow.enabled` | `true` | PoW 验证总开关。`false` 时不解析也不校验 token，交由风控链决定 |
 | `pow.dry_run` | `false` | dry-run：记录但放行 |
 | `pow.bypass_all` | `false` | 紧急绕过 PoW/普通风控；不会绕过 Admin 人工 IP Block |
@@ -276,8 +276,6 @@ print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 | `admin.ip_block.default_ttl` | `1h` | 未指定 TTL 时的人工 Block 时长 |
 | `admin.ip_block.max_ttl` | `24h` | 人工 Block 最大时长，不支持永久 Block |
 | `admin.config_management.enabled` | `false` | 单实例配置草稿、Diff、历史、Apply/回滚；Apply 后需重启生效 |
-
-以上默认值为 `true` 的布尔开关都是「省略即开启」——配置里不写不会把它们关掉。
 
 > `pow.enabled=false` 只跳过 PoW 校验，风控规则照常生效；`bypass_all=true` 则连 PoW 带普通风控一起绕过。Admin 人工 IP Block 优先级高于 `bypass_all`。
 
