@@ -206,42 +206,7 @@ sudo systemctl reload nginx
 
 ---
 
-## 7. 前端签发页面
-
-用户通过静态页面生成带 token/sign 的下载 URL。页面放在镜像站的 `/static/pow/` 路径下。
-
-### 部署
-
-```bash
-sudo mkdir -p /srv/mirrors/static/pow
-sudo cp deploy/frontend/* /srv/mirrors/static/pow/
-```
-
-文件清单：
-- `index.html`：模式选择 + 路径输入 + PoW 计算 + URL 展示
-- `pow.js`：Web Worker，本地算 SHA-256 PoW
-- `config.json`：公开配置（难度、salt、TTL、受保护扩展名）
-
-### 配置
-
-编辑 `config.json`，和后端配置保持一致：
-
-```json
-{
-  "algorithm": "sha256",
-  "salt": "prod-salt-2025",
-  "modes": {
-    "ip_bound": {"enabled": true, "difficulty": 22, "ttl_seconds": 86400},
-    "generic": {"enabled": true, "difficulty": 22, "ttl_seconds": 1800, "max_uses": 5}
-  }
-}
-```
-
-`salt` 和 `difficulty` 与后端 `config.yaml` 保持一致。
-
----
-
-## 8. 回滚
+## 7. 回滚
 
 ### 紧急放行（后端故障）
 
@@ -277,7 +242,7 @@ Nginx 配置移除 `auth_request`，直接走 `try_files`。后端可停掉。
 
 ---
 
-## 9. 监控
+## 8. 监控
 
 ### Prometheus 指标
 
@@ -300,7 +265,7 @@ Nginx 配置移除 `auth_request`，直接走 `try_files`。后端可停掉。
 
 ---
 
-## 10. 压测
+## 9. 压测
 
 ```bash
 # 安装 vegeta
@@ -330,7 +295,7 @@ vegeta report -type=text results.bin
 
 ---
 
-## 11. 常见问题
+## 10. 常见问题
 
 ### Q: Nginx `limit_rate` 变量不生效？
 

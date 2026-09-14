@@ -1,0 +1,177 @@
+server:
+  listen: "127.0.0.1:8080"
+  read_timeout: "2s"
+  write_timeout: "2s"
+  idle_timeout: "30s"
+  shutdown_timeout: "5s"
+
+pow:
+  enabled: true
+  dry_run: false
+  bypass_all: false
+  token_param: "token"
+  sign_param: "sign"
+  max_token_length: 4096
+  max_sign_length: 128
+  algorithm: "sha256"
+  public_salt: "test-mirror-2026-08-21"
+  allow_empty_salt: false
+  allowed_previous_salts: []
+
+  modes:
+    ip_bound:
+      enabled: true
+      min_difficulty: 16
+      max_difficulty: 28
+      max_ttl_seconds: 86400
+      require_ip: true
+
+    generic:
+      enabled: true
+      min_difficulty: 16
+      max_difficulty: 28
+      max_ttl_seconds: 1800
+      max_uses: 5
+      count_head_request: false
+
+protection:
+  protected_extensions:
+    - ".iso"
+    - ".img"
+    - ".qcow2"
+    - ".vmdk"
+    - ".vdi"
+    - ".ova"
+    - ".zip"
+    - ".7z"
+    - ".tar"
+    - ".tar.gz"
+    - ".tar.xz"
+  protected_paths: []
+  excluded_paths: []
+
+storage:
+  driver: "memory"
+  counter_driver: "memory"
+
+risk_control:
+  enabled: true
+
+  pending:
+    enabled: true
+    max_per_ip: 128
+    block_ttl: "1h"
+
+  counters:
+    ip_protected_requests_10m:
+      key: "ip"
+      window: "10m"
+      when:
+        is_protected: true
+      storage: "memory"
+
+    ip_missing_pow_1h:
+      key: "ip"
+      window: "1h"
+      when:
+        is_protected: true
+        pow_status: "missing"
+      storage: "memory"
+
+    ip_protected_requests_1h:
+      key: "ip"
+      window: "1h"
+      when:
+        is_protected: true
+      storage: "memory"
+
+  chains:
+    INPUT:
+      policy:
+        target: RATE_LIMIT
+        limit_rate: "512k"
+        reason: "default_unverified_slow"
+      rules:
+        - name: "allow non protected path"
+          match:
+            is_protected: false
+          target: ACCEPT
+          limit_rate: "0"
+          reason: "not_protected"
+
+        - name: "reject unverifiable pow"
+          match:
+            pow_status: "unverifiable"
+          target: REJECT
+          status: 500
+          reason: "missing_real_ip"
+
+        - name: "reject disabled mode"
+          match:
+            pow_status: "mode_disabled"
+          target: REJECT
+          status: 403
+          reason: "mode_disabled"
+
+        - name: "reject invalid pow"
+          match:
+            pow_status_in: ["invalid", "expired", "used_up"]
+          target: REJECT
+          status: 403
+          reason: "invalid_pow"
+
+        - name: "allow valid pow full speed"
+          match:
+            pow_status: "valid"
+          target: ACCEPT
+          limit_rate: "0"
+          reason: "valid_pow_full_speed"
+
+        - name: "missing pow risk check"
+          match:
+            pow_status: "missing"
+            is_protected: true
+          target: JUMP
+          chain: RISK_CHECK
+
+    RISK_CHECK:
+      policy:
+        target: RATE_LIMIT
+        limit_rate: "512k"
+        reason: "normal_unverified_slow"
+      rules:
+        - name: "many protected downloads per ip"
+          match:
+            counter:
+              name: "ip_protected_requests_10m"
+              op: ">="
+              value: 5
+          target: RATE_LIMIT
+          limit_rate: "128k"
+          reason: "too_many_protected_requests"
+
+        - name: "extreme abuse"
+          match:
+            counter:
+              name: "ip_protected_requests_1h"
+              op: ">="
+              value: 20
+          target: TOO_MANY
+          status: 429
+          reason: "extreme_abuse"
+
+admin:
+  enabled: false
+
+logging:
+  level: "info"
+  format: "json"
+  log_access: true
+  log_denied: true
+  hash_ip: false
+  log_salt: ""
+
+cleanup:
+  enabled: true
+  interval: "10m"
+  expired_grace_period: "24h"

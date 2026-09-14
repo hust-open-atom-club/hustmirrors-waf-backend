@@ -215,9 +215,7 @@ location = /_pow_auth {
 
 ## 生成 PoW 下载链接
 
-后端只验证，不签发。用户通过静态页面（`deploy/frontend/`）在浏览器本地计算 PoW 生成 URL。
-
-也可以用脚本生成：
+后端只验证，不签发。示例脚本：
 
 ```python
 import base64, hashlib, json, time
@@ -319,7 +317,6 @@ MIRRORS_WAF_STORAGE__DRIVER=postgres
 └── deploy/
     ├── nginx/               # Nginx 接入示例
     ├── systemd/             # systemd unit
-    ├── frontend/            # PoW 签发静态页
     └── observability/       # 告警 + Grafana
 ```
 

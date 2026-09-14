@@ -11,11 +11,11 @@ import (
 )
 
 // TestFrontendCanonicalCompatibility verifies that the canonical string
-// format produced by deploy/frontend/pow.js matches what the backend's
-// BuildCanonicalInput expects. If this test breaks, the frontend page
-// will generate tokens the backend rejects.
+// format produced by client implementations matches what the backend's
+// BuildCanonicalInput expects. If this test breaks, externally minted
+// tokens will be rejected.
 func TestFrontendCanonicalCompatibility(t *testing.T) {
-	// This payload mirrors what deploy/frontend/pow.js builds.
+	// This payload mirrors what a client token builder constructs.
 	payload := TokenPayload{
 		Version:    1,
 		Mode:       "generic",
@@ -51,7 +51,7 @@ func TestFrontendCanonicalCompatibility(t *testing.T) {
 }
 
 // TestFrontendTokenEncoding verifies that the base64url token encoding
-// used by pow.js (no padding) can be decoded by the backend's DecodeToken.
+// (no padding) can be decoded by the backend's DecodeToken.
 func TestFrontendTokenEncoding(t *testing.T) {
 	payload := TokenPayload{
 		Version:    1,
@@ -79,7 +79,7 @@ func TestFrontendTokenEncoding(t *testing.T) {
 }
 
 // TestFrontendCanonicalIPBound verifies the ip_bound canonical has the
-// IP field populated, matching pow.js behavior.
+// IP field populated.
 func TestFrontendCanonicalIPBound(t *testing.T) {
 	payload := TokenPayload{
 		Version:    1,
