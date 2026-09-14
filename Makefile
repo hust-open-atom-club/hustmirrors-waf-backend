@@ -4,6 +4,11 @@ GO ?= go
 BIN_DIR := bin
 BIN := $(BIN_DIR)/server
 
+# The admin UI is embedded via go:embed, so the backend cannot compile
+# without these assets. The stamp rule below builds them on demand; touch
+# admin-ui sources and run `make admin-ui-build` to refresh the embed.
+ADMINUI_DIST := internal/adminui/dist/index.html
+
 VERSION ?= dev
 COMMIT ?= none
 BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -17,12 +22,16 @@ LDFLAGS := -s -w \
 
 all: build
 
-build:
+build: $(ADMINUI_DIST)
 	@echo ">> Building $(BIN)"
 	@mkdir -p $(BIN_DIR)
 	@$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN) ./cmd/server
 
-run:
+$(ADMINUI_DIST):
+	@npm --prefix admin-ui install
+	@npm --prefix admin-ui run build
+
+run: $(ADMINUI_DIST)
 	@$(GO) run -ldflags '$(LDFLAGS)' ./cmd/server
 
 test:
@@ -61,6 +70,7 @@ admin-ui-check:
 	@npm --prefix admin-ui run check
 
 admin-ui-build:
+	@npm --prefix admin-ui install
 	@npm --prefix admin-ui run build
 
 build-all: admin-ui-build build

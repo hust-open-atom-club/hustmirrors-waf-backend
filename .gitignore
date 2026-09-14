@@ -45,3 +45,6 @@ bin/
 
 # Verification screenshots (repo root)
 /*.png
+
+# Embedded admin UI build output (rebuilt via make build)
+internal/adminui/dist/
