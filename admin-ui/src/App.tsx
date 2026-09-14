@@ -52,7 +52,25 @@ const navItems: Array<{ id: Page; label: string; kicker: string; icon: typeof Ac
 ]
 
 function initialAuth(): AuthState {
+  try {
+    const raw = window.localStorage.getItem('mirrors-waf.admin-token')
+    if (raw) {
+      const saved = JSON.parse(raw) as { token: string; exp: number }
+      if (saved.token && Date.now() < saved.exp) return { mode: 'token', token: saved.token }
+      window.localStorage.removeItem('mirrors-waf.admin-token')
+    }
+  } catch { /* corrupted entry - ignore */ }
   return { mode: 'none' }
+}
+
+function persistToken(token: string, remember: boolean) {
+  try {
+    if (remember && token) {
+      window.localStorage.setItem('mirrors-waf.admin-token', JSON.stringify({ token, exp: Date.now() + 7 * 24 * 3600 * 1000 }))
+    } else {
+      window.localStorage.removeItem('mirrors-waf.admin-token')
+    }
+  } catch { /* storage unavailable - session only */ }
 }
 
 function App() {
@@ -62,7 +80,7 @@ function App() {
   })
   const [mobileNav, setMobileNav] = useState(false)
   const [auth, setAuth] = useState<AuthState>(initialAuth)
-  const [authForm, setAuthForm] = useState({ mode: 'token' as 'token' | 'basic', token: '', username: '', password: '' })
+  const [authForm, setAuthForm] = useState({ token: '', remember: true })
   const [authRequired, setAuthRequired] = useState(false)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -192,24 +210,25 @@ function App() {
   }
 
   const signIn = async () => {
-    const nextAuth: AuthState = authForm.mode === 'token'
-      ? { mode: 'token', token: authForm.token.trim() }
-      : { mode: 'basic', username: authForm.username, password: authForm.password }
+    const token = authForm.token.trim()
+    const nextAuth: AuthState = { mode: 'token', token }
     setAuth(nextAuth)
     try {
       await rpc('system.ping', {}, nextAuth)
       setAuthRequired(false)
       setToast('已连接到 Admin API')
+      persistToken(token, authForm.remember)
     } catch {
       setAuthRequired(true)
-      setError('凭据校验失败，请检查 Admin 配置。')
+      setError('Token 校验失败')
     }
   }
 
   const signOut = () => {
-    setAuth(initialAuth())
+    setAuth({ mode: 'none' })
     setAuthRequired(false)
-    setToast('已清除当前页面凭据')
+    persistToken('', false)
+    setToast('已退出登录')
   }
 
   const navigate = (next: Page) => {
@@ -498,6 +517,6 @@ function ConfigPage({ auth, onError, onToast, refreshNonce }: { auth: AuthState;
 
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}</label> }
 function EmptyState({ icon: Icon, title, description }: { icon: typeof Activity; title: string; description: string }) { return <div className="empty-state"><div className="empty-icon"><Icon size={22} /></div><strong>{title}</strong><p>{description}</p></div> }
-function AuthModal({ authForm, setAuthForm, onSubmit, onClose }: { authForm: { mode: 'token' | 'basic'; token: string; username: string; password: string }; setAuthForm: (value: { mode: 'token' | 'basic'; token: string; username: string; password: string }) => void; onSubmit: () => void; onClose: () => void }) { return <div className="modal-scrim"><section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button type="button" className="modal-close icon-button" aria-label="关闭" onClick={onClose}><X size={18} /></button><div className="auth-icon"><LockKeyhole size={22} /></div><h2 id="auth-title">连接运维控制面</h2><p>凭据只保存在当前页面内存，不会写入浏览器存储。</p><div className="auth-tabs"><button type="button" className={authForm.mode === 'token' ? 'active' : ''} onClick={() => setAuthForm({ ...authForm, mode: 'token' })}>Bearer Token</button><button type="button" className={authForm.mode === 'basic' ? 'active' : ''} onClick={() => setAuthForm({ ...authForm, mode: 'basic' })}>Basic Auth</button></div><form onSubmit={(event) => { event.preventDefault(); onSubmit() }}>{authForm.mode === 'token' ? <><input className="visually-hidden" name="username" autoComplete="username" value="admin-token" readOnly tabIndex={-1} aria-hidden="true" /><Field label="管理 Token"><input name="password" type="password" autoComplete="current-password" value={authForm.token} autoFocus onChange={(event) => setAuthForm({ ...authForm, token: event.target.value })} /></Field></> : <><Field label="用户名"><input autoComplete="username" value={authForm.username} onChange={(event) => setAuthForm({ ...authForm, username: event.target.value })} /></Field><Field label="密码"><input type="password" autoComplete="current-password" value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} /></Field></>}<button type="submit" className="primary-button full-button"><LockKeyhole size={16} /> 验证并连接</button></form></section></div> }
+function AuthModal({ authForm, setAuthForm, onSubmit, onClose }: { authForm: { token: string; remember: boolean }; setAuthForm: (value: { token: string; remember: boolean }) => void; onSubmit: () => void; onClose: () => void }) { return <div className="modal-scrim"><section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button type="button" className="modal-close icon-button" aria-label="关闭" onClick={onClose}><X size={18} /></button><h2 id="auth-title">登录</h2><form onSubmit={(event) => { event.preventDefault(); onSubmit() }}><input className="visually-hidden" name="username" autoComplete="username" value="admin-token" readOnly tabIndex={-1} aria-hidden="true" /><Field label="管理 Token"><input name="password" type="password" autoComplete="current-password" value={authForm.token} autoFocus onChange={(event) => setAuthForm({ ...authForm, token: event.target.value })} /></Field><label className="check-field auth-remember"><input type="checkbox" checked={authForm.remember} onChange={(event) => setAuthForm({ ...authForm, remember: event.target.checked })} /> 7 天内自动登录</label><button type="submit" className="primary-button full-button">登录</button></form></section></div> }
 
 export default App

@@ -1,7 +1,6 @@
 export type AuthState =
   | { mode: 'none' }
   | { mode: 'token'; token: string }
-  | { mode: 'basic'; username: string; password: string }
 
 export interface StandardResponse<T> {
   ok: boolean

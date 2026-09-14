@@ -22,15 +22,7 @@ export class RPCError extends Error {
 }
 
 function authorization(auth: AuthState): string | undefined {
-  if (auth.mode === 'token') {
-    return `Bearer ${auth.token}`
-  }
-  if (auth.mode === 'basic') {
-    const bytes = new TextEncoder().encode(`${auth.username}:${auth.password}`)
-    let binary = ''
-    for (const byte of bytes) binary += String.fromCharCode(byte)
-    return `Basic ${btoa(binary)}`
-  }
+  if (auth.mode === 'token' && auth.token) return `Bearer ${auth.token}`
   return undefined
 }
 

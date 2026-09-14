@@ -79,7 +79,7 @@ h1 { margin-top: 0; font-size: 20px; line-height: 1.3; letter-spacing: normal; f
 .stats-range button, .audit-toolbar, .chain-card,
 .field input, .field select, .yaml-editor, .config-view, .input-with-button,
 .config-loading, .config-status-card, .diff-summary > div, .diff-values > div,
-.config-notice, .config-readonly-note, .fingerprint-callout, .auth-tabs,
+.config-notice, .config-readonly-note, .fingerprint-callout,
 .empty-icon, .skeleton, .secondary-button { background: var(--surface-2); color: var(--text); }
 .field input, .field select, .yaml-editor, .config-view, .input-with-button { border-color: var(--line); }
 .yaml-editor, .config-view { color: var(--text); }
@@ -118,7 +118,6 @@ th, td, .health-row, .rule-row { border-bottom-color: var(--line); }
 .modal-scrim { background: rgba(15,17,21,.5); backdrop-filter: none; }
 .auth-modal { background: var(--surface); border-radius: 8px; box-shadow: 0 8px 30px rgba(0,0,0,.15); }
 .auth-icon { border-color: rgba(37,99,168,.3); background: rgba(37,99,168,.08); }
-.auth-tabs button.active { background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 .toast { border-color: rgba(46,125,50,.35); background: var(--surface); color: var(--green); }
 
 /* Visual config editor */
