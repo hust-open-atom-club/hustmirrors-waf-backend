@@ -87,9 +87,7 @@ PoW 结果携带在 URL 参数中（`?token=...` 和 `sign=...`），不依赖 C
 
 ### 风控规则链
 
-`risk_control.enabled=true` 时，请求先过一条 iptables 风格的规则链，再决定是否走
-PoW 校验。链的入口是 `INPUT`，支持 `ACCEPT` / `REJECT` / `RATE_LIMIT` /
-`TOO_MANY` / `REQUIRE_POW` / `JUMP` / `LOG` / `MARK`。
+`risk_control.enabled=true` 时，请求先过一条 iptables 风格的规则链，再决定是否走PoW 校验。链的入口是 `INPUT`，支持 `ACCEPT` / `REJECT` / `RATE_LIMIT`/`TOO_MANY` / `REQUIRE_POW` / `JUMP` / `LOG` / `MARK`。
 
 规则匹配 `pow_status` 时，取值含义：
 
@@ -130,7 +128,7 @@ make build
 ### 启动（开发模式）
 
 ```bash
-./bin/server --config configs/config.dev.yaml
+./bin/server --config configs/config.example.yaml
 ```
 
 ### 健康检查
@@ -152,11 +150,13 @@ curl -i http://127.0.0.1:8080/verify_pow \
   -H "X-Real-IP: 1.2.3.4"
 # X-Pow-Reason: not_protected
 
-# 保护路径无 token：403
+# 保护路径无 token：限速放行
 curl -i http://127.0.0.1:8080/verify_pow \
   -H "X-Original-URI: /ubuntu.iso" \
   -H "X-Real-IP: 1.2.3.4"
-# X-Pow-Error: missing_token_or_sign
+# HTTP/1.1 200
+# X-Pow-Decision: unverified_slow
+# X-Pow-Limit-Rate: 512k
 
 # 非法 token：403
 curl -i http://127.0.0.1:8080/verify_pow \
@@ -166,21 +166,7 @@ curl -i http://127.0.0.1:8080/verify_pow \
 # X-Pow-Error: malformed_token
 ```
 
-以上是 `config.dev.yaml`（`risk_control.enabled=false`）的行为：无 token 直接拒绝。
-
-`config.example.yaml` 开启了风控链，无 token 的请求会命中 `RATE_LIMIT` 规则而非被拒：
-
-```bash
-./bin/server --config configs/config.example.yaml
-
-curl -i http://127.0.0.1:8080/verify_pow \
-  -H "X-Original-URI: /ubuntu.iso" \
-  -H "X-Real-IP: 1.2.3.4"
-# HTTP/1.1 200 OK
-# X-Pow-Decision: unverified_slow
-# X-Pow-Reason: default_unverified_slow
-# X-Pow-Limit-Rate: 512k
-```
+`config.dev.yaml` 关闭风控（`risk_control.enabled=false`），无 token 的保护路径直接 403 而非限速。
 
 ## Nginx 接入
 
