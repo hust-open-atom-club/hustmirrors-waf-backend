@@ -6,6 +6,8 @@
 
 @layer base {
   * { @apply border-border; }
+  html { color-scheme: light; }
+  html.dark { color-scheme: dark; }
   html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; font-size: 14px; }
   body { @apply bg-background text-foreground font-sans leading-relaxed; }
 }

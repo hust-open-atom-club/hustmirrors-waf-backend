@@ -243,7 +243,7 @@ function App() {
           <button className="lg:hidden text-muted-foreground hover:text-foreground" onClick={() => setMobileNav(true)} aria-label="打开导航"><Menu size={18} /></button>
           <div className="text-sm font-medium">{pageTitle}</div>
           <div className="ml-auto flex items-center gap-2">
-            <span className={`badge ${error ? 'bg-warning-soft text-warning-foreground' : 'bg-success-soft text-success-foreground'}`}>
+            <span className={`badge ${error ? 'bg-warning-soft text-warning' : 'bg-success-soft text-success'}`}>
               <span className={`h-1.5 w-1.5 rounded-full ${error ? 'bg-warning' : 'bg-success'}`} />
               <span className="hidden sm:inline">{error ? '连接异常' : '服务正常'}</span>
             </span>
@@ -364,7 +364,7 @@ function OverviewPage({ summary, series, health }: { summary: DashboardSummary |
             <div className="card-title">拒绝速率</div>
             <div className="card-desc">pow_denied_total</div>
           </div>
-          <span className={`badge ${series?.available ? 'bg-success-soft text-success-foreground' : 'bg-muted text-muted-foreground'}`}>
+          <span className={`badge ${series?.available ? 'bg-success-soft text-success' : 'bg-muted text-muted-foreground'}`}>
             <Activity size={12} /> {series?.available ? '有数据' : '暂无数据'}
           </span>
         </div>
@@ -377,7 +377,7 @@ function OverviewPage({ summary, series, health }: { summary: DashboardSummary |
       <div className="card">
         <div className="card-header flex items-center justify-between">
           <div className="card-title">依赖健康</div>
-          <span className={`badge ${health === null ? 'bg-muted text-muted-foreground' : health.ok ? 'bg-success-soft text-success-foreground' : 'bg-destructive-soft text-destructive-foreground'}`}>
+          <span className={`badge ${health === null ? 'bg-muted text-muted-foreground' : health.ok ? 'bg-success-soft text-success' : 'bg-destructive-soft text-destructive'}`}>
             {health === null ? '加载中' : health.ok ? '全部正常' : '需检查'}
           </span>
         </div>
@@ -433,7 +433,7 @@ function StatsPage({ stats, range, onRangeChange }: { stats: StatsData | null; r
               <div className="card-title">{metric.label}</div>
               <div className="card-desc">{metric.key}</div>
             </div>
-            <span className={`badge ${series?.available ? 'bg-success-soft text-success-foreground' : 'bg-muted text-muted-foreground'}`}>
+            <span className={`badge ${series?.available ? 'bg-success-soft text-success' : 'bg-muted text-muted-foreground'}`}>
               <Activity size={12} /> {series?.available ? 'LIVE' : 'N/A'}
             </span>
           </div>
@@ -459,7 +459,7 @@ function AuditPage({ audit }: { audit: AuditList | null }) {
     if (resultFilter === 'error' && event.ok) return false
     return true
   })
-  return <div className="card">
+  return <div className="card overflow-hidden">
     <div className="card-header flex flex-wrap items-center gap-3">
       <div>
         <div className="card-title">审计事件</div>
@@ -486,7 +486,7 @@ function AuditPage({ audit }: { audit: AuditList | null }) {
               <td className="tabular-nums text-muted-foreground">{formatDate(event.timestamp)}</td>
               <td className="font-medium">{event.action}</td>
               <td>{event.actor}</td>
-              <td><span className={`badge ${event.ok ? 'bg-success-soft text-success-foreground' : 'bg-destructive-soft text-destructive-foreground'}`}>{event.ok ? 'OK' : event.code || 'ERROR'}</span></td>
+              <td><span className={`badge ${event.ok ? 'bg-success-soft text-success' : 'bg-destructive-soft text-destructive'}`}>{event.ok ? 'OK' : event.code || 'ERROR'}</span></td>
               <td className="max-w-64 truncate text-muted-foreground" title={event.detail || event.reason}>{event.reason || event.target || event.detail || '—'}</td>
               <td className="tabular-nums text-faint-foreground font-mono text-xs">{event.request_id || '—'}</td>
             </tr>

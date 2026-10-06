@@ -334,7 +334,7 @@ export default function ConfigManagement({ auth, onError, onToast, refreshNonce 
       <div className="card flex flex-col">
         <div className="card-header flex items-center justify-between">
           <div className="card-title">配置草稿</div>
-          <span className={`badge ${editorDirty ? 'bg-warning-soft text-warning-foreground' : draft?.validated ? 'bg-success-soft text-success-foreground' : 'bg-muted text-muted-foreground'}`}>
+          <span className={`badge ${editorDirty ? 'bg-warning-soft text-warning' : draft?.validated ? 'bg-success-soft text-success' : 'bg-muted text-muted-foreground'}`}>
             {editorDirty ? 'UNSAVED' : draft?.validated ? 'VALIDATED' : draft ? 'SAVED' : 'CURRENT'}
           </span>
         </div>
@@ -346,7 +346,7 @@ export default function ConfigManagement({ auth, onError, onToast, refreshNonce 
           <button type="button" className="btn-outline" onClick={() => void validateDraft()} disabled={!canEdit || !yaml.trim() || busy}>校验</button>
           <button type="button" className="btn-primary" onClick={() => void previewDiff()} disabled={!canEdit || !yaml.trim() || busy}>生成 Diff</button>
         </div>
-        {validation && <div className={`mx-6 mb-4 rounded-lg border px-4 py-3 text-sm ${validation.valid ? 'border-success/30 bg-success-soft text-success-foreground' : 'border-destructive/30 bg-destructive-soft text-destructive-foreground'}`} role="status">
+        {validation && <div className={`mx-6 mb-4 rounded-lg border px-4 py-3 text-sm ${validation.valid ? 'border-success/30 bg-success-soft text-success' : 'border-destructive/30 bg-destructive-soft text-destructive'}`} role="status">
           <div className="font-medium">{validation.valid ? '草稿通过校验' : '草稿校验失败'}</div>
           {validation.error && <p className="mt-1 text-xs opacity-80">{validation.error}</p>}
           {validation.problems?.map((problem, index) => <p key={`${problem}-${index}`} className="mt-1 text-xs opacity-80">· {problem}</p>)}
@@ -366,7 +366,7 @@ export default function ConfigManagement({ auth, onError, onToast, refreshNonce 
       </div>
     </div>
 
-    <div className="card">
+    <div className="card overflow-hidden">
       <div className="card-header flex items-center justify-between">
         <div className="card-title">配置历史</div>
         <span className="badge bg-muted text-muted-foreground">{history.length}</span>
@@ -380,7 +380,7 @@ export default function ConfigManagement({ auth, onError, onToast, refreshNonce 
               <td><span className="font-medium">{entry.action.toUpperCase()}</span><span className="block text-xs text-faint-foreground">{formatDate(entry.created_at)}</span></td>
               <td className="tabular-nums">{entry.changed}</td>
               <td>{entry.actor || '—'}<span className="block text-xs text-faint-foreground truncate max-w-48" title={entry.reason}>{entry.reason || (entry.rollback_target ? `rollback → #${entry.rollback_target}` : '—')}</span></td>
-              <td><DangerBadge danger={entry.danger || 'normal'} />{entry.restart_required && <span className="block mt-1 text-xs text-warning-foreground">RESTART</span>}</td>
+              <td><DangerBadge danger={entry.danger || 'normal'} />{entry.restart_required && <span className="block mt-1 text-xs text-warning">RESTART</span>}</td>
               <td><button type="button" className="btn-outline !px-2.5 !py-1 text-xs" disabled={!capabilities.apply_enabled || entry.revision === currentRevision || busy} onClick={() => void previewRollback(entry)}><Undo2 size={12} /> 回滚</button></td>
             </tr>
           ))}</tbody></table>
@@ -398,13 +398,13 @@ function StatusCard({ label, value, tone }: { label: string; value: string; tone
 }
 
 function CapabilityBadge({ label, enabled }: { label: string; enabled: boolean }) {
-  return <span className={`badge ${enabled ? 'bg-success-soft text-success-foreground' : 'bg-muted text-muted-foreground'}`}><span className={`h-1.5 w-1.5 rounded-full ${enabled ? 'bg-success' : 'bg-muted-foreground/40'}`} />{label}</span>
+  return <span className={`badge ${enabled ? 'bg-success-soft text-success' : 'bg-muted text-muted-foreground'}`}><span className={`h-1.5 w-1.5 rounded-full ${enabled ? 'bg-success' : 'bg-muted-foreground/40'}`} />{label}</span>
 }
 
 const dangerCls: Record<string, string> = {
-  normal: 'bg-success-soft text-success-foreground',
-  dangerous: 'bg-warning-soft text-warning-foreground',
-  critical: 'bg-destructive-soft text-destructive-foreground',
+  normal: 'bg-success-soft text-success',
+  dangerous: 'bg-warning-soft text-warning',
+  critical: 'bg-destructive-soft text-destructive',
 }
 const dangerBorder: Record<string, string> = {
   normal: 'border-l-success', dangerous: 'border-l-warning', critical: 'border-l-destructive',
@@ -440,7 +440,7 @@ function DiffChanges({ diff }: { diff: ConfigDiff }) {
       </div>
       <div className="flex flex-wrap items-center gap-2 mt-2">
         <DangerBadge danger={change.danger} />
-        {change.restart_required && <span className="text-xs text-warning-foreground">RESTART</span>}
+        {change.restart_required && <span className="text-xs text-warning">RESTART</span>}
         {change.sensitive && <span className="text-xs text-muted-foreground">REDACTED</span>}
       </div>
     </article>
@@ -465,8 +465,8 @@ function ConfirmationModal({ confirmation, submitting, onSubmit, onClose }: {
   const phraseRequired = Boolean(confirmation.diff.confirmation_phrase)
   const reasonRequired = rollback || confirmation.diff.danger !== 'normal'
   const ready = acknowledged && (!reasonRequired || reason.trim().length > 0) && (!phraseRequired || phrase === confirmation.diff.confirmation_phrase)
-  return <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-backdrop overflow-y-auto">
-    <section className="w-full max-w-2xl rounded-xl border border-border bg-overlay text-overlay-foreground shadow-pop p-6" role="dialog" aria-modal="true" aria-label="确认配置操作">
+  return <div className="fixed inset-0 z-50 overflow-y-auto bg-backdrop">
+    <section className="w-full max-w-2xl my-8 mx-auto rounded-xl border border-border bg-overlay text-overlay-foreground shadow-pop p-6" role="dialog" aria-modal="true" aria-label="确认配置操作">
       <div className="flex items-center gap-2.5 mb-4">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-destructive text-destructive-foreground"><AlertTriangle size={16} /></div>
         <div>
@@ -484,7 +484,7 @@ function ConfirmationModal({ confirmation, submitting, onSubmit, onClose }: {
       {phraseRequired && <>
         <div className="flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive-soft px-3 py-2 mb-3 text-sm">
           <span className="text-muted-foreground">确认短语</span>
-          <code className="font-mono text-destructive-foreground">{confirmation.diff.confirmation_phrase}</code>
+          <code className="font-mono text-destructive">{confirmation.diff.confirmation_phrase}</code>
         </div>
         <label className="block mb-3">
           <span className="block mb-1.5 text-xs font-medium text-muted-foreground">输入短语</span>
