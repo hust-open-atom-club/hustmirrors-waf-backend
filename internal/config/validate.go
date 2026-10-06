@@ -115,9 +115,6 @@ func Validate(c *Config) error {
 		e.checkRiskControl(c.RiskControl)
 	}
 
-	if c.Admin.Enabled {
-		e.checkAdmin(c.Admin)
-	}
 
 	if c.Server.ReadTimeout <= 0 {
 		e.add("server.read_timeout must be > 0")
@@ -223,51 +220,6 @@ func (e *ValidationError) checkRiskControl(rc RiskControlConfig) {
 		case "", "memory", "redis":
 		default:
 			e.add("risk_control.counters.%s: storage %q is not supported", name, ctr.Storage)
-		}
-	}
-}
-
-func (e *ValidationError) checkAdmin(a AdminConfig) {
-	if a.Listen == "" {
-		e.add("admin.listen must not be empty")
-	}
-	if a.Auth.Token == "" && a.Auth.TokenFile == "" {
-		// Unauthenticated admin API: only defensible when the listener is
-		// not reachable from untrusted networks, so insist on either a
-		// loopback bind or a CIDR allow-list.
-		if !isLoopbackListen(a.Listen) && len(a.AllowCIDRs) == 0 {
-			e.add("admin.auth requires a token_file/token unless admin.listen is loopback "+
-				"or admin.allow_cidrs is set (listen=%q)", a.Listen)
-		}
-	}
-	for i, cidr := range a.AllowCIDRs {
-		if _, _, err := net.ParseCIDR(cidr); err != nil {
-			e.add("admin.allow_cidrs[%d]: %q is not a valid CIDR", i, cidr)
-		}
-	}
-	checkAdminURL(e, "admin.stats.prometheus_url", a.Stats.PrometheusURL)
-	checkAdminURL(e, "admin.stats.loki_url", a.Stats.LokiURL)
-	if a.Stats.LokiURL != "" && strings.TrimSpace(a.Stats.LokiQuery) == "" {
-		e.add("admin.stats.loki_query must be set when admin.stats.loki_url is configured")
-	}
-	if a.Stats.QueryTimeout <= 0 {
-		e.add("admin.stats.query_timeout must be > 0")
-	}
-	if a.IPBlock.DefaultTTL <= 0 {
-		e.add("admin.ip_block.default_ttl must be > 0")
-	}
-	if a.IPBlock.MaxTTL <= 0 {
-		e.add("admin.ip_block.max_ttl must be > 0")
-	}
-	if a.IPBlock.DefaultTTL > a.IPBlock.MaxTTL {
-		e.add("admin.ip_block.default_ttl must be <= admin.ip_block.max_ttl")
-	}
-	if a.ConfigManagement.Enabled {
-		if !a.MutationsEnabled {
-			e.add("admin.config_management.enabled requires admin.mutations_enabled=true")
-		}
-		if a.Auth.Token == "" && a.Auth.TokenFile == "" {
-			e.add("admin.config_management.enabled requires admin.auth token_file/token")
 		}
 	}
 }

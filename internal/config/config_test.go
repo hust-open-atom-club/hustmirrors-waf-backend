@@ -29,11 +29,6 @@ func TestApplyDefaults_FillsRequired(t *testing.T) {
 	assert.Equal(t, 128, c.RiskControl.Pending.MaxPerIP)
 	assert.Equal(t, time.Hour, c.RiskControl.Pending.BlockTTL)
 	assert.Equal(t, "info", c.Logging.Level)
-	assert.Equal(t, "127.0.0.1:8081", c.Admin.Listen)
-	assert.False(t, c.Admin.MutationsEnabled)
-	assert.False(t, c.Admin.IPBlock.Enabled)
-	assert.Equal(t, time.Hour, c.Admin.IPBlock.DefaultTTL)
-	assert.Equal(t, 24*time.Hour, c.Admin.IPBlock.MaxTTL)
 	assert.Equal(t, 10*time.Minute, c.Cleanup.Interval)
 }
 
@@ -97,31 +92,6 @@ func TestValidate_PostgresRequiresDSN(t *testing.T) {
 	err := Validate(c)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "storage.postgres.dsn is required")
-}
-
-func TestValidate_AdminTokenRequired(t *testing.T) {
-	c := &Config{}
-	applyDefaults(c)
-	c.Pow.Modes.IPBound.Enabled = true
-	c.Admin.Enabled = true
-	c.Admin.Listen = "0.0.0.0:8081"
-	c.Admin.Auth.TokenFile = ""
-	c.Admin.Auth.Token = ""
-	err := Validate(c)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "admin.auth requires a token_file/token")
-}
-
-func TestValidate_AdminBadCIDR(t *testing.T) {
-	c := &Config{}
-	applyDefaults(c)
-	c.Pow.Modes.IPBound.Enabled = true
-	c.Admin.Enabled = true
-	c.Admin.Listen = "127.0.0.1:8081"
-	c.Admin.AllowCIDRs = []string{"not-a-cidr"}
-	err := Validate(c)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not a valid CIDR")
 }
 
 func TestValidate_RiskControlUnknownJumpChain(t *testing.T) {
@@ -237,7 +207,6 @@ func TestValidate_GoodConfig_NoError(t *testing.T) {
 	c.Protection.ProtectedPaths = []string{"^/ubuntu/.+\\.iso$"}
 	c.Protection.ExcludedPaths = []string{"^/static/"}
 	c.RiskControl.Enabled = false
-	c.Admin.Enabled = false
 	err := Validate(c)
 	assert.NoError(t, err)
 }
@@ -275,64 +244,8 @@ func TestApplyDefaults_CleanupCanBeExplicitlyDisabled(t *testing.T) {
 	assert.False(t, *c.Cleanup.Enabled, "an explicit false must be preserved")
 }
 
-// TestValidate_AdminUnauthenticatedRequiresConfinedListener covers a config
 // that silently exposed the admin API: no token configured means
 // unauthenticated, which is only defensible on a confined listener.
-func TestValidate_AdminUnauthenticatedRequiresConfinedListener(t *testing.T) {
-	c := &Config{}
-	applyDefaults(c)
-	c.Pow.Modes.IPBound.Enabled = true
-	c.Admin.Enabled = true
-	c.Admin.Listen = "0.0.0.0:8081"
-
-	err := Validate(c)
-	require.Error(t, err, "an enabled admin API with no token on a public bind must be rejected")
-	assert.Contains(t, err.Error(), "admin.auth requires a token_file/token")
-}
-
-// TestValidate_AdminNoTokenOnLoopbackIsAllowed: a loopback bind may run
-// unauthenticated; an explicit allow-list also works.
-func TestValidate_AdminNoTokenOnConfinedListener(t *testing.T) {
-	base := func() *Config {
-		c := &Config{}
-		applyDefaults(c)
-		c.Pow.Modes.IPBound.Enabled = true
-		c.Admin.Enabled = true
-		return c
-	}
-
-	t.Run("public bind is rejected", func(t *testing.T) {
-		c := base()
-		c.Admin.Listen = "0.0.0.0:8081"
-		err := Validate(c)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "admin.auth requires a token_file/token")
-	})
-
-	t.Run("bare port is rejected", func(t *testing.T) {
-		// ":8081" binds every interface; it must not read as loopback.
-		c := base()
-		c.Admin.Listen = ":8081"
-		require.Error(t, Validate(c))
-	})
-
-	t.Run("loopback is accepted", func(t *testing.T) {
-		c := base()
-		c.Admin.Listen = "127.0.0.1:8081"
-		assert.NoError(t, Validate(c))
-	})
-
-	t.Run("allow_cidrs permits a wider bind", func(t *testing.T) {
-		c := base()
-		c.Admin.Listen = "0.0.0.0:8081"
-		c.Admin.AllowCIDRs = []string{"10.0.0.0/8"}
-		assert.NoError(t, Validate(c))
-	})
-}
-
-// TestValidate_CounterKeyMustBeSupported: counterKey handles only ip, path
-// and ip_path; anything else silently skips the counter, so a typo used to
-// validate cleanly and then never increment.
 func TestValidate_CounterKeyMustBeSupported(t *testing.T) {
 	base := func(key string) *Config {
 		c := &Config{}

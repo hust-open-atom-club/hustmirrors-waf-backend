@@ -67,9 +67,6 @@ storage:
 risk_control:
   enabled: false
 
-admin:
-  enabled: false
-
 logging:
   level: "info"
   format: "json"
@@ -98,7 +95,6 @@ func TestBuild_StartShutdown(t *testing.T) {
 	}()
 
 	require.NotNil(t, a.mainSrv)
-	assert.Nil(t, a.adminSrv)
 
 	req := httptest.NewRequest(http.MethodGet, "/verify_pow", nil)
 	req.Header.Set("X-Original-URI", "/x.txt")

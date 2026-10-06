@@ -27,11 +27,6 @@ go.work.sum
 # env file
 .env
 
-# Frontend dependencies and caches
-admin-ui/node_modules/
-admin-ui/.vite/
-admin-ui/*.tsbuildinfo
-
 # Editor/IDE
 # .idea/
 # .vscode/
@@ -45,9 +40,6 @@ bin/
 
 # Verification screenshots (repo root)
 /*.png
-
-# Embedded admin UI build output (rebuilt via make build)
-internal/adminui/dist/
 
 # Tooling
 .narrafork/

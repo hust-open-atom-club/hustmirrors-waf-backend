@@ -252,49 +252,6 @@ risk_control:
           status: 429
           reason: "extreme_abuse"
 
-admin:
-  # Leave disabled in production unless you need the RPC admin API. When
-  # enabled, bind only to localhost or an internal interface.
-  enabled: false
-  listen: "127.0.0.1:8081"
-  auth:
-    # A configured token enables token auth (Authorization: Bearer <token>).
-    # With no token/token_file the admin API is unauthenticated, which is
-    # only accepted when the listener is confined: either a loopback bind
-    # or a non-empty allow_cidrs.
-    token_file: "/etc/mirrors-waf/admin.token"
-    # Alternatively, set the token inline:
-    # token: "changeme"
-  allow_cidrs:
-    - "127.0.0.1/32"
-    - "10.0.0.0/8"
-  # Records admin actions to the structured log (event=admin_audit).
-  audit_log: true
-
-  # All mutating Admin RPCs remain disabled unless this master switch and the
-  # feature switch below are both enabled. No admin token means read-only.
-  mutations_enabled: false
-  ip_block:
-    # Instance-scoped manual IP denylist. State is lost on restart and is not
-    # shared across replicas. Manual blocks take precedence over bypass_all.
-    enabled: false
-    default_ttl: "1h"
-    max_ttl: "24h"
-
-  config_management:
-    # Single-instance draft/diff/history/apply/rollback. Requires an explicit
-    # --config path, mutations_enabled=true, and token/basic Admin auth. Apply
-    # only updates the file; restart the service to activate the new config.
-    enabled: false
-
-  stats:
-    # Optional read-only observability sources for the admin dashboard.
-    # The backend exposes only fixed metric queries and the fixed Loki query.
-    prometheus_url: ""
-    loki_url: ""
-    loki_query: '{event="admin_audit"}'
-    query_timeout: "2s"
-
 logging:
   level: "info"                   # debug | info | warn | error
   format: "json"                  # json | console

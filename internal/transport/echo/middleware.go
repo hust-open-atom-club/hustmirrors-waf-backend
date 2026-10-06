@@ -2,15 +2,11 @@ package echo
 
 import (
 	"context"
-	"crypto/subtle"
-	"net/http"
-	"strings"
 	"time"
 
 	echov4 "github.com/labstack/echo/v4"
 	middleware "github.com/labstack/echo/v4/middleware"
 
-	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/config"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/logging"
 )
 
@@ -74,59 +70,4 @@ func timeoutMiddleware(read, write time.Duration) echov4.MiddlewareFunc {
 			return next(c)
 		}
 	}
-}
-
-// adminAuthMiddleware builds the auth gate for the admin API.
-//
-// Unlike pow.CompareSign - which compares a hash both sides can derive -
-// these credentials are real secrets, so all comparisons use
-// subtle.ConstantTimeCompare. A short-circuiting != leaks how many leading
-// bytes of a guess were correct, which turns an offline brute force into a
-// far cheaper byte-at-a-time search.
-func adminAuthMiddleware(cfg config.AdminConfig) echov4.MiddlewareFunc {
-	expected := cfg.Auth.Token
-	if expected == "" {
-		// Unauthenticated admin API. Config validation rejects this unless
-		// the listener is loopback or CIDR allow-listed, so this is not a
-		// silent open door.
-		return func(next echov4.HandlerFunc) echov4.HandlerFunc { return next }
-	}
-	return func(next echov4.HandlerFunc) echov4.HandlerFunc {
-		return func(c echov4.Context) error {
-			got := bearerToken(c.Request().Header.Get("Authorization"))
-			if got == "" || !secureEqual(got, expected) {
-				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid admin token"})
-			}
-			return next(c)
-		}
-	}
-}
-
-// secureEqual compares two secrets in constant time with respect to their
-// contents. Length is not hidden, which is standard and acceptable here.
-func secureEqual(got, want string) bool {
-	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
-}
-
-func adminCIDRMiddleware(cfg config.AdminConfig) echov4.MiddlewareFunc {
-	if len(cfg.AllowCIDRs) == 0 {
-		return func(next echov4.HandlerFunc) echov4.HandlerFunc { return next }
-	}
-	return func(next echov4.HandlerFunc) echov4.HandlerFunc {
-		return func(c echov4.Context) error {
-			ip := clientIP(c)
-			if !ipAllowed(ip, cfg.AllowCIDRs) {
-				return c.JSON(http.StatusForbidden, map[string]string{"error": "ip not allowed"})
-			}
-			return next(c)
-		}
-	}
-}
-
-func bearerToken(h string) string {
-	const prefix = "Bearer "
-	if !strings.HasPrefix(h, prefix) {
-		return ""
-	}
-	return strings.TrimSpace(h[len(prefix):])
 }

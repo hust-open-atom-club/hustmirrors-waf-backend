@@ -12,7 +12,6 @@ type Container struct {
 	RiskDecisionTotal       *prometheus.CounterVec
 	StorageOperations       *prometheus.CounterVec
 	StorageLatencySeconds   *prometheus.HistogramVec
-	AdminActions            *prometheus.CounterVec
 	ActiveSignatures        prometheus.Gauge
 }
 
@@ -55,12 +54,7 @@ func New() *Container {
 			Buckets:   prometheus.DefBuckets,
 		}, []string{"driver", "operation"}),
 
-		AdminActions: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Namespace: "mirrors_waf",
-			Subsystem: "admin",
-			Name:      "actions_total",
-			Help:      "Admin-API action counts by action code (ok or err).",
-		}, []string{"action", "outcome"}),
+
 
 		ActiveSignatures: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: "mirrors_waf",
@@ -80,7 +74,6 @@ func (c *Container) Register() error {
 		c.RiskDecisionTotal,
 		c.StorageOperations,
 		c.StorageLatencySeconds,
-		c.AdminActions,
 		c.ActiveSignatures,
 	}
 	for _, col := range collectors {

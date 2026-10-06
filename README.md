@@ -202,6 +202,25 @@ location = /_pow_auth {
 }
 ```
 
+## 管理 CLI（garmr）
+
+配置管理与规则检查通过本地 CLI 完成，服务无需运行：
+
+```bash
+garmr -config /etc/mirrors-waf/config.yaml config show        # 查看配置（敏感值脱敏）
+garmr config edit                                             # $EDITOR 编辑 → 校验 → diff → 确认 → 写入
+garmr config validate candidate.yaml                          # 校验候选文件
+garmr config diff candidate.yaml                              # 对比当前配置
+garmr config history                                          # 修订历史
+garmr config rollback 3                                       # 回滚到 revision 3
+garmr rule list                                               # 风控规则链
+garmr rule preview -path /ubuntu.iso -pow missing             # 模拟请求走链
+```
+
+`config edit` 的流程：保存退出后自动做结构校验（失败回到编辑器）→ 敏感值占位符合并 →
+危险分级 diff（`normal` / `dangerous` / `critical`）→ 危险变更要求输入确认短语与原因 →
+原子写盘并落历史。生效需重启服务。
+
 ## 生成 PoW 下载链接
 
 后端只验证，不签发。示例脚本：
@@ -254,19 +273,10 @@ print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 | `cleanup.enabled` | `true` | 过期记录回收 |
 | `logging.log_access` | `true` | 是否记录放行结果的日志 |
 | `logging.log_denied` | `true` | 是否记录拒绝结果的日志 |
-| `admin.enabled` | `false` | 管理 API |
-| `admin.audit_log` | `true` | 是否记录管理操作审计 |
-| `admin.mutations_enabled` | `false` | Admin 写操作总开关；未配置 admin token 时始终只读 |
-| `admin.ip_block.enabled` | `false` | 启用实例级人工 IP Block/Unblock |
-| `admin.ip_block.default_ttl` | `1h` | 未指定 TTL 时的人工 Block 时长 |
-| `admin.ip_block.max_ttl` | `24h` | 人工 Block 最大时长，不支持永久 Block |
-| `admin.config_management.enabled` | `false` | 单实例配置草稿、Diff、历史、Apply/回滚；Apply 后需重启生效 |
 
-> `pow.enabled=false` 只跳过 PoW 校验，风控规则照常生效；`bypass_all=true` 则连 PoW 带普通风控一起绕过。Admin 人工 IP Block 优先级高于 `bypass_all`。
+> `pow.enabled=false` 只跳过 PoW 校验，风控规则照常生效；`bypass_all=true` 则连 PoW 带普通风控一起绕过。
 
-> Admin 鉴权只支持 token：配置 `admin.auth.token_file` 或 `admin.auth.token` 即启用（`Authorization: Bearer <token>`）。都不配则无认证，仅接受 loopback 监听或配置了 `allow_cidrs` 的实例。
-
-> 配置管理在显式 `--config <path>` 启动、`admin.mutations_enabled=true`、`admin.config_management.enabled=true` 且配置了 Admin token 时可写。草稿在内存，历史在配置文件同目录 `.mirrors-waf-history/`。Apply/rollback 只写配置文件，需重启生效；敏感值显示为 `${SECRET:KEEP}`，不支持 API 轮换。
+> 配置管理由 `garmr` CLI 在本地完成（见下节），历史保存在配置文件同目录 `.mirrors-waf-history/`。Apply/rollback 只写配置文件，需重启生效；敏感值显示为 `${SECRET:KEEP}` 占位符。
 
 > `logging.log_*` 只影响日志不影响指标；5xx 始终记录。
 
@@ -283,7 +293,8 @@ MIRRORS_WAF_STORAGE__DRIVER=postgres
 ## 项目结构
 
 ```
-├── cmd/server/               # 入口
+├── cmd/server/               # 服务入口
+├── cmd/garmr/                # 本地管理 CLI
 ├── internal/
 │   ├── app/                  # 装配与启动
 │   ├── auth/                 # PoW 验证编排
@@ -292,9 +303,9 @@ MIRRORS_WAF_STORAGE__DRIVER=postgres
 │   ├── storage/             # usage: memory/postgres/redis，counter: memory/redis
 │   ├── risk/                # iptables 风格规则链
 │   ├── transport/echo/      # HTTP 层
-│   ├── admin/               # 管理 API
+│   ├── configctl/            # CLI 配置管理编排（diff/danger/secret 合并）
 │   ├── config/              # 配置 + 校验
-│   ├── configstore/         # 单实例草稿、历史、原子写盘和回滚
+│   ├── configstore/         # 历史目录、原子写盘和回滚
 │   ├── logging/             # zap 包装
 │   └── metrics/             # Prometheus
 ├── configs/                  # 示例配置
@@ -326,20 +337,17 @@ make migrate-up
 ## 开发
 
 ```bash
-make build          # 编译（首次自动构建前端并嵌入）
-make build-all      # 前端 + 后端
+make build          # 编译 server
+make build-cli      # 编译 garmr CLI
 make test           # 单元测试
 make test-race      # race detector（需 CGO，Windows 上需装 gcc）
 make coverage       # 覆盖率
-make admin-ui-check # 管理后台前端类型检查
 make lint           # golangci-lint（未安装时退回 go vet）
 
 # PostgreSQL 真实集成测试（使用独立 schema，不会删除数据库中的其他表）
 POSTGRES_TEST_DSN='postgres://user:pass@127.0.0.1:5432/mirrors_pow?sslmode=disable' make test-postgres
 go test -tags=benchmark -bench=. ./internal/app/...  # 压测
 ```
-
-管理后台前端在 `admin-ui/`（React + Vite），构建产物经 go:embed 嵌入二进制，改动后跑 `make build-all` 重新嵌入。
 
 `make coverage` 用 `-coverpkg=./...` 把全仓生产代码纳入统计。PostgreSQL 集成测试需要设置 `POSTGRES_TEST_DSN`，否则跳过。
 

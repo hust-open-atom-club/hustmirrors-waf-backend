@@ -13,16 +13,11 @@ services:
     command: ["--config", "/etc/mirrors-waf/config.yaml"]
     ports:
       - "127.0.0.1:8080:8080"
-      - "127.0.0.1:8081:8081"
     volumes:
       - type: bind
         source: ./config.test.yaml
         target: /etc/mirrors-waf/config.yaml
         read_only: true
-    secrets:
-      - source: admin_token
-        target: admin.token
-        mode: 0444
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
@@ -31,7 +26,3 @@ services:
     security_opt:
       - no-new-privileges:true
     restart: "no"
-
-secrets:
-  admin_token:
-    file: ./secrets/admin.token

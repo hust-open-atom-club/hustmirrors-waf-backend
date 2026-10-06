@@ -21,8 +21,6 @@ storage:
   counter_driver: memory
 risk_control:
   enabled: false
-admin:
-  enabled: false
 logging:
   level: info
   format: json

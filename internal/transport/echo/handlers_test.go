@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/admin"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/auth"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/config"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/logging"
@@ -105,115 +103,6 @@ func TestServer_Readyz(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
-
-func TestServer_Admin_Ping_NoneAuth(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Admin.Auth.Token = ""
-	asvc, err := admin.New(admin.Options{})
-	require.NoError(t, err)
-	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/system.ping", strings.NewReader("{}"))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	s.Echo().ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusOK, rec.Code)
-}
-
-func TestServer_Admin_TokenAuth_Missing(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Admin.Auth.Token = "t"
-	cfg.Admin.Auth.Token = "secret"
-	asvc, _ := admin.New(admin.Options{})
-	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/system.ping", strings.NewReader("{}"))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	s.Echo().ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-}
-
-func TestServer_Admin_TokenAuth_Valid(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Admin.Auth.Token = "t"
-	cfg.Admin.Auth.Token = "secret"
-	asvc, _ := admin.New(admin.Options{})
-	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/system.ping", strings.NewReader("{}"))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer secret")
-	rec := httptest.NewRecorder()
-	s.Echo().ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusOK, rec.Code)
-}
-
-func TestServer_Admin_CIDR_Allow(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Admin.Auth.Token = ""
-	cfg.Admin.AllowCIDRs = []string{"127.0.0.1/32"}
-	asvc, _ := admin.New(admin.Options{})
-	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/system.ping", strings.NewReader("{}"))
-	req.Header.Set("Content-Type", "application/json")
-	req.RemoteAddr = "127.0.0.1:12345"
-	rec := httptest.NewRecorder()
-	s.Echo().ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	req2 := httptest.NewRequest(http.MethodPost, "/admin/api/system.ping", strings.NewReader("{}"))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.RemoteAddr = "10.0.0.1:12345"
-	rec2 := httptest.NewRecorder()
-	s.Echo().ServeHTTP(rec2, req2)
-	assert.Equal(t, http.StatusForbidden, rec2.Code)
-}
-
-func TestServer_Admin_ConfigValidate(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Admin.Auth.Token = ""
-	asvc, _ := admin.New(admin.Options{})
-	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
-
-	body := `{"config_yaml":"pow:\n  modes:\n    ip_bound:\n      enabled: true\n      min_difficulty: 22\n      max_difficulty: 28\n      max_ttl_seconds: 86400\n"}`
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/config.validate", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	s.Echo().ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusOK, rec.Code)
-	var resp map[string]interface{}
-	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-	assert.Equal(t, true, resp["ok"])
-}
-
-func TestServer_Admin_SystemInfo(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Admin.Auth.Token = ""
-	asvc, _ := admin.New(admin.Options{})
-	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/system.info", strings.NewReader("{}"))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	s.Echo().ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusOK, rec.Code)
-}
-
-func TestServer_Admin_RulePreview_NoEngine(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Admin.Auth.Token = ""
-	asvc, _ := admin.New(admin.Options{})
-	s := NewAdmin(AdminOptions{Config: cfg, Logger: logging.NewNop(), AdminSvc: asvc})
-	body := `{"request":{"path":"/x.iso","is_protected":true,"pow_status":"missing"}}`
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/rule.preview", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	s.Echo().ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusOK, rec.Code)
-}
-
-func TestServer_BearerToken(t *testing.T) {
-	assert.Equal(t, "abc", bearerToken("Bearer abc"))
-	assert.Equal(t, "", bearerToken("Basic abc"))
-	assert.Equal(t, "", bearerToken(""))
-}
 
 func TestServer_ClientIP(t *testing.T) {
 	s := NewMain(MainOptions{Config: &config.Config{}, Logger: logging.NewNop()})

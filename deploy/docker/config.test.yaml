@@ -40,28 +40,6 @@ risk_control:
   pending:
     enabled: false
 
-admin:
-  enabled: true
-  listen: "0.0.0.0:8081"
-  auth:
-    token_file: "/run/secrets/admin.token"
-  allow_cidrs:
-    - "127.0.0.1/32"
-    - "172.16.0.0/12"
-  audit_log: true
-  mutations_enabled: false
-  ip_block:
-    enabled: false
-    default_ttl: "1h"
-    max_ttl: "24h"
-  config_management:
-    enabled: false
-  stats:
-    prometheus_url: ""
-    loki_url: ""
-    loki_query: '{event="admin_audit"}'
-    query_timeout: "2s"
-
 logging:
   level: "info"
   format: "json"

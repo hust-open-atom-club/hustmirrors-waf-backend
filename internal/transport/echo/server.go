@@ -8,7 +8,6 @@ import (
 	echov4 "github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 
-	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/admin"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/auth"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/config"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/logging"
@@ -21,8 +20,6 @@ type Server struct {
 	logger     logging.Logger
 	metrics    *metrics.Container
 	authSvc    *auth.Service
-	adminSvc   *admin.Service
-	auditLog   admin.AuditLogger
 	httpServer *http.Server
 }
 
@@ -55,45 +52,6 @@ func NewMain(opts MainOptions) *Server {
 	}
 	s.registerMainRoutes()
 	return s
-}
-
-type AdminOptions struct {
-	Config   *config.Config
-	Logger   logging.Logger
-	Metrics  *metrics.Container
-	AdminSvc *admin.Service
-}
-
-func NewAdmin(opts AdminOptions) *Server {
-	e := echov4.New()
-	e.HideBanner = true
-	e.HidePort = true
-	e.HTTPErrorHandler = errorHandler(opts.Logger)
-
-	e.Use(middleware.Recover())
-	if opts.Logger != nil {
-		e.Use(requestIDMiddleware(opts.Logger))
-	}
-	e.Use(middleware.BodyLimit("256K"))
-
-	s := &Server{
-		echo:     e,
-		cfg:      opts.Config,
-		logger:   opts.Logger,
-		metrics:  opts.Metrics,
-		adminSvc: opts.AdminSvc,
-		auditLog: buildAuditLogger(opts.Config, opts.Logger),
-	}
-	s.registerAdminRoutes()
-	return s
-}
-
-// buildAuditLogger honours admin.audit_log; nil means absent, i.e. on.
-func buildAuditLogger(cfg *config.Config, logger logging.Logger) admin.AuditLogger {
-	if cfg != nil && cfg.Admin.AuditLog != nil && !*cfg.Admin.AuditLog {
-		return admin.NopAuditLogger{}
-	}
-	return admin.NewLogAuditLogger(logger)
 }
 
 func (s *Server) Start(listen string) error {

@@ -48,9 +48,6 @@ storage:
 risk_control:
   enabled: false
 
-admin:
-  enabled: false
-
 logging:
   level: "debug"
   format: "console"

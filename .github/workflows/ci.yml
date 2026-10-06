@@ -16,15 +16,6 @@ jobs:
           go-version: "1.24"
           cache: true
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Build admin UI (embedded via go:embed)
-        run: |
-          npm --prefix admin-ui install
-          npm --prefix admin-ui run build
-
       - name: Vet
         run: go vet ./...
 
@@ -35,26 +26,6 @@ jobs:
         run: go test -race -count=1 ./...
 
       - name: Build
-        run: go build ./...
-
-  admin-ui:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: admin-ui
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: admin-ui/package-lock.json
-
-      - run: npm ci
-
-      - name: Type check
-        run: npm run check
-
-      - name: Build
-        run: npx vite build --outDir /tmp/adminui-dist
+        run: |
+          go build ./cmd/server
+          go build ./cmd/garmr

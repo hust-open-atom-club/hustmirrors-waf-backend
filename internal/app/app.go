@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -14,11 +13,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/admin"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/auth"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/clock"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/config"
-	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/configstore"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/logging"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/matcher"
 	"github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/metrics"
@@ -36,10 +33,7 @@ type App struct {
 	logger      logging.Logger
 	metrics     *metrics.Container
 	authSvc     *auth.Service
-	adminSvc    *admin.Service
 	mainSrv     *echo.Server
-	adminSrv    *echo.Server
-	configState admin.ConfigState
 
 	storageCloser  func() error
 	redisClient    *redis.Client
@@ -80,7 +74,6 @@ func build(ctx context.Context, cfg *config.Config, loaded *config.Loaded) (*App
 		logging.String("storage_driver", cfg.Storage.Driver),
 		logging.String("counter_driver", cfg.Storage.CounterDriver),
 		logging.Bool("risk_control", cfg.RiskControl.Enabled),
-		logging.Bool("admin_enabled", cfg.Admin.Enabled),
 	)
 
 	m := metrics.New()
@@ -109,7 +102,7 @@ func build(ctx context.Context, cfg *config.Config, loaded *config.Loaded) (*App
 	var counterReg *risk.CounterRegistry
 	var pendingBlocker risk.PendingBlocker
 	pendingEnabled := cfg.RiskControl.Pending.Enabled == nil || *cfg.RiskControl.Pending.Enabled
-	needsPendingBlocker := (cfg.RiskControl.Enabled && pendingEnabled) || (cfg.Admin.Enabled && cfg.Admin.IPBlock.Enabled)
+	needsPendingBlocker := cfg.RiskControl.Enabled && pendingEnabled
 	if needsPendingBlocker {
 		pendingBlocker = risk.NewIPPendingBlocker(
 			cfg.RiskControl.Pending.MaxPerIP,
@@ -153,57 +146,11 @@ func build(ctx context.Context, cfg *config.Config, loaded *config.Loaded) (*App
 		return nil, fmt.Errorf("app: build auth service: %w", err)
 	}
 
-	var configState admin.ConfigState
-	if loaded != nil && loaded.Managed && cfg.Admin.ConfigManagement.Enabled {
-		state, stateErr := configstore.New(loaded.Path, loaded.Raw, true)
-		if stateErr != nil {
-			logger.Warn(ctx, "configuration management unavailable; continuing read-only", logging.Err(stateErr))
-		} else {
-			configState = state
-		}
-	}
-
-	var adminSvc *admin.Service
-	if cfg.Admin.Enabled {
-		if cfg.Admin.Auth.TokenFile != "" {
-			b, err := os.ReadFile(cfg.Admin.Auth.TokenFile)
-			if err != nil {
-				if pendingBlocker != nil {
-					_ = pendingBlocker.Close()
-				}
-				storageCloser()
-				return nil, fmt.Errorf("app: read admin token file: %w", err)
-			}
-
-			cfg.Admin.Auth.Token = strings.TrimSpace(string(b))
-		}
-		adminSvc, err = admin.New(admin.Options{
-			Config:      cfg,
-			ConfigState: configState,
-			Validator:   admin.DefaultValidator{},
-			RiskEngine:  riskEngine,
-			Usage:       usageStore,
-			Pending:     pendingSnapshotSource(pendingBlocker),
-			IPBlocks:    ipBlockAdmin(pendingBlocker),
-			Metrics:     m,
-			Probes:      buildAdminProbes(cfg, usageStore, counterStore),
-		})
-		if err != nil {
-			if pendingBlocker != nil {
-				_ = pendingBlocker.Close()
-			}
-			storageCloser()
-			return nil, fmt.Errorf("app: build admin service: %w", err)
-		}
-	}
-
 	a := &App{
 		cfg:            cfg,
 		logger:         logger,
 		metrics:        m,
 		authSvc:        authSvc,
-		adminSvc:       adminSvc,
-		configState:    configState,
 		storageCloser:  storageCloser,
 		redisClient:    redisClient,
 		pendingBlocker: pendingBlocker,
@@ -215,15 +162,6 @@ func build(ctx context.Context, cfg *config.Config, loaded *config.Loaded) (*App
 		Metrics: m,
 		AuthSvc: authSvc,
 	})
-
-	if adminSvc != nil {
-		a.adminSrv = echo.NewAdmin(echo.AdminOptions{
-			Config:   cfg,
-			Logger:   logger,
-			Metrics:  m,
-			AdminSvc: adminSvc,
-		})
-	}
 
 	// Enabled is a *bool: nil means the key was absent, which applyDefaults
 	// resolves to true. Treat a nil here (config built in code, bypassing
@@ -239,57 +177,8 @@ func build(ctx context.Context, cfg *config.Config, loaded *config.Loaded) (*App
 	return a, nil
 }
 
-func pendingSnapshotSource(blocker risk.PendingBlocker) admin.PendingSnapshotSource {
-	if source, ok := blocker.(admin.PendingSnapshotSource); ok {
-		return source
-	}
-	return nil
-}
-
-func ipBlockAdmin(blocker risk.PendingBlocker) admin.IPBlockAdmin {
-	if controller, ok := blocker.(admin.IPBlockAdmin); ok {
-		return controller
-	}
-	return nil
-}
-
-func buildAdminProbes(cfg *config.Config, usageStore storage.UsageStore, counterStore storage.CounterStore) []admin.ComponentProbe {
-	probes := make([]admin.ComponentProbe, 0, 2)
-	if usageStore != nil {
-		probes = append(probes, admin.ComponentProbe{
-			Name: "usage_store",
-			Check: func(ctx context.Context) error {
-				_, err := usageStore.Get(ctx, "__admin_health_probe__")
-				if errors.Is(err, storage.ErrNotFound) {
-					return nil
-				}
-				return err
-			},
-		})
-	}
-	if counterStore != nil {
-		probeName := "counter_store"
-		probe := admin.ComponentProbe{Name: probeName}
-		if cfg != nil && len(cfg.RiskControl.Counters) > 0 {
-			for name, counter := range cfg.RiskControl.Counters {
-				counterName := name
-				window := counter.Window
-				probe.Check = func(ctx context.Context) error {
-					_, err := counterStore.Get(ctx, counterName, "__admin_health_probe__", window)
-					return err
-				}
-				break
-			}
-		} else {
-			probe.Detail = "no configured counters"
-		}
-		probes = append(probes, probe)
-	}
-	return probes
-}
-
 func (a *App) Start() error {
-	errs := make(chan error, 2)
+	errs := make(chan error, 1)
 
 	go func() {
 		a.logger.Info(context.Background(), "main server listening", logging.String("addr", a.cfg.Server.Listen))
@@ -297,15 +186,6 @@ func (a *App) Start() error {
 			errs <- err
 		}
 	}()
-
-	if a.adminSrv != nil {
-		go func() {
-			a.logger.Info(context.Background(), "admin server listening", logging.String("addr", a.cfg.Admin.Listen))
-			if err := a.adminSrv.Start(a.cfg.Admin.Listen); err != nil {
-				errs <- err
-			}
-		}()
-	}
 
 	return <-errs
 }
@@ -326,11 +206,6 @@ func (a *App) Shutdown(ctx context.Context) error {
 	if a.mainSrv != nil {
 		if err := a.mainSrv.Shutdown(shutdownCtx); err != nil {
 			errs = append(errs, fmt.Errorf("main server shutdown: %w", err))
-		}
-	}
-	if a.adminSrv != nil {
-		if err := a.adminSrv.Shutdown(shutdownCtx); err != nil {
-			errs = append(errs, fmt.Errorf("admin server shutdown: %w", err))
 		}
 	}
 	if a.pendingBlocker != nil {

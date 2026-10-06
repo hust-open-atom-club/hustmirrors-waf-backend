@@ -43,7 +43,6 @@ cp configs/config.example.yaml /etc/mirrors-waf/config.yaml
 - `storage.driver`：`memory` / `postgres` / `redis`
 - `storage.counter_driver`：`memory` / `redis`
 - `risk_control.enabled`：是否启用风控规则链
-- `admin.enabled`：管理 API，默认关闭；开启后配置 `admin.auth.token_file`（无 token 时仅接受 loopback/allow_cidrs）
 
 环境变量覆盖（前缀 `MIRRORS_WAF_`，分隔符 `__`）：
 
@@ -69,7 +68,6 @@ make migrate-up
 迁移文件在 `migrations/001_init.sql`，创建三张表：
 - `pow_usage`：generic 模式使用记录
 - `risk_counter`：风控计数器快照
-- `admin_audit_log`：管理操作审计
 
 ## 5. 启动
 
@@ -91,25 +89,14 @@ curl http://127.0.0.1:8080/readyz
 
 ### Docker 测试部署
 
-#### 1. 准备 Admin token
-
-```bash
-mkdir -p deploy/docker/secrets
-umask 077
-openssl rand -hex 32 > deploy/docker/secrets/admin.token
-```
-
-#### 2. 检查测试配置
+#### 1. 检查测试配置
 
 测试配置位于 `deploy/docker/config.test.yaml`：
 
-- 宿主机只绑定 `127.0.0.1:8080` 和 `127.0.0.1:8081`
+- 宿主机只绑定 `127.0.0.1:8080`
 - memory storage，不依赖 PostgreSQL/Redis
-- Admin 使用 `/run/secrets/admin.token`
-- `mutations_enabled` 和 `config_management.enabled` 默认关闭
-- Prometheus/Loki 未配置时后台对应模块显示降级状态
 
-#### 3. 构建并启动
+#### 2. 构建并启动
 
 在仓库根目录执行：
 
@@ -130,33 +117,20 @@ docker compose -f deploy/docker/compose.test.yaml logs -f mirrors-waf
 docker compose -f deploy/docker/compose.test.yaml down
 ```
 
-#### 4. 健康检查和后台访问
+#### 3. 健康检查
 
 ```bash
 curl http://127.0.0.1:8080/healthz
 curl http://127.0.0.1:8080/readyz
 ```
 
-后台地址：`http://127.0.0.1:8081/admin/`，登录用 `deploy/docker/secrets/admin.token` 中的 token。
-
-#### 5. 容器安全约束
+#### 4. 容器安全约束
 
 - 非 root 用户 `10001:10001`
 - `read_only: true` root filesystem
 - `/tmp` 仅 64 MiB `tmpfs`
 - 丢弃全部 Linux capabilities、`no-new-privileges`
 - Docker healthcheck 请求 `/healthz`
-
-配置管理 Apply 需要可写的配置卷和 `.mirrors-waf-history` 目录；测试 Compose 默认关闭配置管理。
-
-#### 6. 接入 Prometheus/Loki
-
-```yaml
-admin:
-  stats:
-    prometheus_url: "http://prometheus:9090"
-    loki_url: "http://loki:3100"
-```
 
 ### systemd 托管
 

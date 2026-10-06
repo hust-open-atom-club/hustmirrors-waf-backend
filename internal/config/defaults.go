@@ -114,22 +114,6 @@ func applyDefaults(c *Config) {
 		c.Logging.LogDenied = &on
 	}
 
-	if c.Admin.Listen == "" {
-		c.Admin.Listen = "127.0.0.1:8081"
-	}
-	if c.Admin.AuditLog == nil {
-		on := true
-		c.Admin.AuditLog = &on
-	}
-	if c.Admin.Stats.QueryTimeout == 0 {
-		c.Admin.Stats.QueryTimeout = parseDur("2s")
-	}
-	if c.Admin.IPBlock.DefaultTTL == 0 {
-		c.Admin.IPBlock.DefaultTTL = time.Hour
-	}
-	if c.Admin.IPBlock.MaxTTL == 0 {
-		c.Admin.IPBlock.MaxTTL = 24 * time.Hour
-	}
 	if c.Cleanup.Enabled == nil {
 		on := true
 		c.Cleanup.Enabled = &on

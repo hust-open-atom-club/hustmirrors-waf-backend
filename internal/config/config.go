@@ -8,7 +8,6 @@ type Config struct {
 	Protection  ProtectionConfig  `mapstructure:"protection"`
 	Storage     StorageConfig     `mapstructure:"storage"`
 	RiskControl RiskControlConfig `mapstructure:"risk_control"`
-	Admin       AdminConfig       `mapstructure:"admin"`
 	Logging     LoggingConfig     `mapstructure:"logging"`
 	Cleanup     CleanupConfig     `mapstructure:"cleanup"`
 }
@@ -167,45 +166,6 @@ type CounterMatch struct {
 	Name  string `mapstructure:"name"`
 	Op    string `mapstructure:"op"` // >= | > | == | <= | <
 	Value int64  `mapstructure:"value"`
-}
-
-type AdminConfig struct {
-	Enabled          bool                        `mapstructure:"enabled"`
-	Listen           string                      `mapstructure:"listen"`
-	Auth             AuthConfig                  `mapstructure:"auth"`
-	AllowCIDRs       []string                    `mapstructure:"allow_cidrs"`
-	Stats            AdminStatsConfig            `mapstructure:"stats"`
-	MutationsEnabled bool                        `mapstructure:"mutations_enabled"`
-	IPBlock          AdminIPBlockConfig          `mapstructure:"ip_block"`
-	ConfigManagement AdminConfigManagementConfig `mapstructure:"config_management"`
-	// AuditLog records admin actions. Pointer so an omitted key (-> true)
-	// differs from an explicit false.
-	AuditLog *bool `mapstructure:"audit_log"`
-}
-
-type AdminIPBlockConfig struct {
-	Enabled    bool          `mapstructure:"enabled"`
-	DefaultTTL time.Duration `mapstructure:"default_ttl"`
-	MaxTTL     time.Duration `mapstructure:"max_ttl"`
-}
-
-type AdminConfigManagementConfig struct {
-	Enabled bool `mapstructure:"enabled"`
-}
-
-type AdminStatsConfig struct {
-	PrometheusURL string        `mapstructure:"prometheus_url"`
-	LokiURL       string        `mapstructure:"loki_url"`
-	LokiQuery     string        `mapstructure:"loki_query"`
-	QueryTimeout  time.Duration `mapstructure:"query_timeout"`
-}
-
-type AuthConfig struct {
-	TokenFile string `mapstructure:"token_file"`
-	Token     string `mapstructure:"token"` // inline alternative to TokenFile
-	// A non-empty token enables token auth; an empty one leaves the admin
-	// API unauthenticated, which validation confines to loopback/CIDR
-	// allow-listed listeners.
 }
 
 type LoggingConfig struct {
