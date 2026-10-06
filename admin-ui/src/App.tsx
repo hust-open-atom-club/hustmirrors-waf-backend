@@ -1,54 +1,26 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  Activity,
-  AlertTriangle,
-  Ban,
-  BarChart3,
-  Check,
-  ChevronRight,
-  CircleHelp,
-  FileSearch,
-  Gauge,
-  KeyRound,
-  LayoutDashboard,
-  LockKeyhole,
-  Menu,
-  RefreshCw,
-  Search,
-  Settings2,
-  ShieldCheck,
-  TerminalSquare,
-  TimerReset,
-  X,
-  Zap,
+  Activity, BarChart3, ChevronRight, CircleHelp, FileSearch,
+  LayoutDashboard, LockKeyhole, Menu, RefreshCw, Settings2, ShieldCheck, X,
 } from 'lucide-react'
 import { AuthRequiredError, rpc } from './api'
 import ConfigManagement from './components/ConfigManagement'
 import type {
-  AuditList,
-  AuthState,
-  DashboardSeries,
-  DashboardSummary,
-  PendingList,
-  RuleList,
-  RulePreview,
-  RiskBlockMutation,
-  SystemHealth,
-  SystemInfo,
-  TokenGet,
+  AuditList, AuthState, DashboardSeries, DashboardSummary,
+  SystemHealth, SystemInfo,
 } from './types'
 import { formatDate, formatNumber, shortCommit } from './utils'
 
-type Page = 'overview' | 'stats' | 'rules' | 'tokens' | 'pending' | 'audit' | 'config'
+type Page = 'overview' | 'stats' | 'audit' | 'config'
 type StatsRange = '1h' | '6h' | '24h'
 type StatsData = { range: StatsRange; series: Record<string, DashboardSeries> }
 
-const navItems: Array<{ id: Page; label: string; kicker: string; icon: typeof Activity }> = [
-  { id: 'overview', label: '总览', kicker: '', icon: LayoutDashboard },
-  { id: 'stats', label: '统计', kicker: '', icon: BarChart3 },
-  { id: 'audit', label: '审计', kicker: '', icon: FileSearch },
-  { id: 'config', label: '配置', kicker: '', icon: Settings2 },
+const navItems: Array<{ id: Page; label: string; icon: typeof Activity }> = [
+  { id: 'overview', label: '总览', icon: LayoutDashboard },
+  { id: 'stats', label: '统计', icon: BarChart3 },
+  { id: 'audit', label: '审计', icon: FileSearch },
+  { id: 'config', label: '配置', icon: Settings2 },
 ]
 
 function initialAuth(): AuthState {
@@ -92,15 +64,13 @@ function App() {
   const [stats, setStats] = useState<StatsData | null>(null)
   const [health, setHealth] = useState<SystemHealth | null>(null)
   const [info, setInfo] = useState<SystemInfo | null>(null)
-  const [rules, setRules] = useState<RuleList | null>(null)
-  const [pending, setPending] = useState<PendingList | null>(null)
   const [audit, setAudit] = useState<AuditList | null>(null)
   const [toast, setToast] = useState('')
 
   const handleLoadError = useCallback((reason: unknown) => {
     if (reason instanceof AuthRequiredError) {
       setAuthRequired(true)
-      setError('管理 API 需要凭据。凭据仅保存在当前页面内存中。')
+      setError('管理 API 需要凭据')
       return
     }
     if (reason instanceof DOMException && reason.name === 'AbortError') return
@@ -124,14 +94,14 @@ function App() {
     } catch (reason) {
       handleLoadError(reason)
     }
-  }, [auth])
+  }, [auth, handleLoadError])
 
   const loadStats = useCallback(async (signal?: AbortSignal) => {
     setError('')
     const ranges: Record<StatsRange, { seconds: number; step: number }> = {
       '1h': { seconds: 60 * 60, step: 60 },
-      '6h': { seconds: 6 * 60 * 60, step: 300 },
-      '24h': { seconds: 24 * 60 * 60, step: 900 },
+      '6h': { seconds: 6 * 60 * 3600, step: 300 },
+      '24h': { seconds: 24 * 60 * 3600, step: 900 },
     }
     const range = ranges[statsRange]
     const to = Math.floor(Date.now() / 1000)
@@ -154,8 +124,6 @@ function App() {
     if (page === 'stats') return loadStats(signal)
     setError('')
     try {
-      if (page === 'rules') setRules(await rpc<RuleList>('rule.list', {}, auth, signal))
-      if (page === 'pending') setPending(await rpc<PendingList>('risk.blocks.list', {}, auth, signal))
       if (page === 'audit') setAudit(await rpc<AuditList>('audit.search', { limit: 100 }, auth, signal))
       setAuthRequired(false)
     } catch (reason) {
@@ -231,164 +199,130 @@ function App() {
     setToast('已退出登录')
   }
 
-  const navigate = (next: Page) => {
-    setPage(next)
-    setMobileNav(false)
-  }
+  const pageTitle = { overview: '总览', stats: '统计', audit: '审计', config: '配置' }[page]
+  const connected = auth.mode === 'token'
 
   return (
-    <div className="app-shell">
-      <aside className={`side-nav ${mobileNav ? 'is-open' : ''}`} aria-label="主导航">
-        <div className="brand-lockup">
-          <div className="brand-mark" aria-hidden="true"><ShieldCheck size={23} /></div>
-          <div>
-            <strong>Mirrors WAF</strong>
-            <span>管理控制台</span>
+    <div className="min-h-screen flex bg-background-secondary">
+      <aside className={`fixed inset-y-0 left-0 z-30 w-52 flex flex-col bg-surface border-r border-border transition-transform lg:translate-x-0 ${mobileNav ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex items-center gap-2.5 px-4 h-14 border-b border-border">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <ShieldCheck size={17} />
           </div>
-          <button className="icon-button mobile-close" aria-label="关闭导航" onClick={() => setMobileNav(false)}><X size={18} /></button>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold leading-tight">Mirrors WAF</div>
+            <div className="text-[11px] text-muted-foreground">管理控制台</div>
+          </div>
+          <button className="ml-auto lg:hidden text-muted-foreground hover:text-foreground" onClick={() => setMobileNav(false)} aria-label="关闭导航"><X size={16} /></button>
         </div>
-        <div className="nav-section-label">OPERATIONS</div>
-        <nav>
+        <nav className="flex-1 px-2 py-3 space-y-0.5">
           {navItems.map((item) => {
             const Icon = item.icon
+            const active = page === item.id
             return (
-              <button key={item.id} className={`nav-item ${page === item.id ? 'is-active' : ''}`} onClick={() => navigate(item.id)}>
-                <Icon size={18} strokeWidth={1.8} />
-                <span><b>{item.label}</b><small>{item.kicker}</small></span>
-                {page === item.id && <ChevronRight className="nav-chevron" size={15} />}
+              <button key={item.id}
+                className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${active ? 'bg-primary-soft text-primary font-medium' : 'text-muted-foreground hover:text-foreground hover:bg-accent'}`}
+                onClick={() => { setPage(item.id); setMobileNav(false) }}>
+                <Icon size={16} strokeWidth={1.8} />
+                {item.label}
+                {active && <ChevronRight size={14} className="ml-auto" />}
               </button>
             )
           })}
         </nav>
-        <div className="nav-spacer" />
-        <div className="sidebar-footer"><span>build {shortCommit(info?.commit ?? '')}</span><span>v{info?.version ?? 'dev'}</span></div>
+        <div className="px-4 py-3 border-t border-border text-[11px] text-faint-foreground flex justify-between">
+          <span>build {shortCommit(info?.commit ?? '')}</span>
+          <span>v{info?.version ?? 'dev'}</span>
+        </div>
       </aside>
-      {mobileNav && <button className="nav-scrim" aria-label="关闭导航" onClick={() => setMobileNav(false)} />}
+      {mobileNav && <button className="fixed inset-0 z-20 bg-backdrop lg:hidden" aria-label="关闭导航" onClick={() => setMobileNav(false)} />}
 
-      <main className="main-column" id="main-content">
-        <header className="top-bar">
-          <div className="top-left">
-            <button className="icon-button mobile-menu" aria-label="打开导航" onClick={() => setMobileNav(true)}><Menu size={20} /></button>
-            <div className="breadcrumbs"><strong>{navItems.find((item) => item.id === page)?.label}</strong></div>
-          </div>
-          <div className="top-actions">
-            <div className="connection-pill"><span className={error ? 'warning' : 'online'} /> {error ? '连接异常' : '服务正常'}</div>
-            <button className="icon-button" aria-label="刷新数据" onClick={() => void refresh()} disabled={refreshing}><RefreshCw size={17} className={refreshing ? 'spin' : ''} /></button>
-            <button className="operator-chip" onClick={auth.mode === 'none' ? () => setAuthRequired(true) : signOut} title={auth.mode === 'none' ? '配置凭据' : '清除当前凭据'}><b>{auth.mode === 'none' ? '连接' : '已登录'}</b></button>
+      <div className="flex-1 min-w-0 lg:pl-52">
+        <header className="sticky top-0 z-10 flex items-center gap-3 h-14 px-4 lg:px-8 border-b border-border bg-surface/95 backdrop-blur">
+          <button className="lg:hidden text-muted-foreground hover:text-foreground" onClick={() => setMobileNav(true)} aria-label="打开导航"><Menu size={18} /></button>
+          <div className="text-sm font-medium">{pageTitle}</div>
+          <div className="ml-auto flex items-center gap-2">
+            <span className={`badge ${error ? 'bg-warning-soft text-warning-foreground' : 'bg-success-soft text-success-foreground'}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${error ? 'bg-warning' : 'bg-success'}`} />
+              <span className="hidden sm:inline">{error ? '连接异常' : '服务正常'}</span>
+            </span>
+            <button className="btn-outline !px-2.5" onClick={() => void refresh()} disabled={refreshing} aria-label="刷新数据">
+              <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
+            </button>
+            {connected
+              ? <button className="btn-outline" onClick={signOut}>已登录</button>
+              : <button className="btn-primary" onClick={() => setAuthRequired(true)}>登录</button>}
           </div>
         </header>
 
-        <div className="content-wrap">
-          <div className="page-heading">
-            <h1>{pageTitle(page)}</h1>
-          </div>
-
-          {error && <div className="alert-banner" role="alert"><AlertTriangle size={18} /><div><strong>控制面连接异常</strong><span>{error}</span></div><button onClick={() => void refresh()}>重试</button></div>}
-          {loading ? <LoadingState /> : <>
+        <main className="page space-y-6">
+          {error && (
+            <div className="card border-destructive/40 px-6 py-4 flex items-center gap-3 text-sm">
+              <span className="text-destructive font-medium">控制面连接异常</span>
+              <span className="text-muted-foreground flex-1">{error}</span>
+              <button className="btn-outline" onClick={() => void refresh()}>重试</button>
+            </div>
+          )}
+          {loading ? <Loading /> : <>
             {page === 'overview' && <OverviewPage summary={summary} series={series} health={health} />}
             {page === 'stats' && <StatsPage stats={stats} range={statsRange} onRangeChange={setStatsRange} />}
-            {page === 'rules' && <RulesPage rules={rules} auth={auth} onError={handleLoadError} />}
-            {page === 'tokens' && <TokensPage auth={auth} onError={handleLoadError} />}
-            {page === 'pending' && <PendingPage pending={pending} auth={auth} onError={handleLoadError} onChanged={async (message) => { await loadPageData(); setToast(message) }} />}
             {page === 'audit' && <AuditPage audit={audit} />}
-            {page === 'config' && <ConfigPage auth={auth} onError={handleLoadError} onToast={setToast} refreshNonce={configRefreshNonce} />}
+            {page === 'config' && <ConfigManagement auth={auth} onError={handleLoadError} onToast={setToast} refreshNonce={configRefreshNonce} />}
           </>}
-        </div>
-      </main>
+        </main>
+      </div>
 
       {authRequired && <AuthModal authForm={authForm} setAuthForm={setAuthForm} onSubmit={() => void signIn()} onClose={() => setAuthRequired(false)} />}
-      {toast && <div className="toast" role="status"><Check size={16} /> {toast}</div>}
+      {toast && <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg border border-success/30 bg-surface px-4 py-2.5 text-sm text-success shadow-pop">{toast}</div>}
     </div>
   )
 }
 
-function pageTitle(page: Page) {
-  return { overview: '总览监控', stats: '统计分析', rules: '规则链', tokens: 'Token 检索', pending: 'Pending 守卫', audit: '审计轨迹', config: '配置管理' }[page]
+function Loading() {
+  return <div className="space-y-4">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="card h-24 animate-pulse" />)}</div>
 }
 
-function LoadingState() {
-  return <div className="loading-grid"><div className="skeleton hero-skeleton" /><div className="skeleton" /><div className="skeleton" /><div className="skeleton wide" /></div>
-}
-
-function OverviewPage({ summary, series, health }: { summary: DashboardSummary | null; series: DashboardSeries | null; health: SystemHealth | null }) {
-  const metrics = summary?.metrics
-  const cards = [
-    { label: 'PoW 校验', value: formatNumber(metrics?.pow_verify_total ?? 0), sub: '进程累计', icon: Zap, accent: 'cyan' },
-    { label: '放行', value: formatNumber(metrics?.pow_allowed_total ?? 0), sub: '通过验证', icon: ShieldCheck, accent: 'green' },
-    { label: '拒绝', value: formatNumber(metrics?.pow_denied_total ?? 0), sub: '被拒绝', icon: LockKeyhole, accent: 'red' },
-    { label: '活跃签名', value: formatNumber(metrics?.active_signatures ?? 0), sub: '使用记录', icon: KeyRound, accent: 'amber' },
-  ]
-  return <>
-    <section className="metric-grid" aria-label="核心指标">
-      {cards.map((card) => <MetricCard key={card.label} {...card} />)}
-    </section>
-    <section className="dashboard-grid">
-      <div className="panel chart-panel">
-        <PanelHeader title="拒绝速率" action={<span className={`source-badge ${series?.available ? 'good' : 'muted'}`}><Activity size={13} /> {series?.available ? '有数据' : '暂无数据'}</span>} />
-        {series?.available && series.points.length > 0 ? <TrendChart points={series.points} /> : <EmptyState icon={BarChart3} title="暂无时序数据" description={series?.error ?? '未配置 Prometheus。'} />}
+function PageHeader({ title, desc, actions }: { title: string; desc?: string; actions?: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between">
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+        {desc && <p className="mt-1 text-sm text-muted-foreground">{desc}</p>}
       </div>
-      <div className="panel health-panel">
-        <PanelHeader title="依赖健康" action={<span className={`source-badge ${health === null ? 'muted' : health.ok ? 'good' : 'danger'}`}><span className="tiny-dot" /> {health === null ? '加载中' : health.ok ? '全部正常' : '需检查'}</span>} />
-        <div className="health-list">{(health?.components ?? []).map((component) => <HealthRow key={component.name} {...component} />)}</div>
-      </div>
-    </section>
-  </>
+      {actions && <div className="flex items-center gap-2">{actions}</div>}
+    </div>
+  )
 }
 
-const statsMetricMeta = [
-  { key: 'pow_verify_total', label: '验证请求', icon: Zap, accent: 'cyan', description: 'PoW 验证速率' },
-  { key: 'pow_allowed_total', label: '允许通过', icon: ShieldCheck, accent: 'green', description: '有效验证速率' },
-  { key: 'pow_denied_total', label: '拒绝请求', icon: LockKeyhole, accent: 'red', description: '失败验证速率' },
-  { key: 'risk_decision_total', label: '风险决策', icon: Gauge, accent: 'amber', description: '风控决策速率' },
-] as const
+const statDot: Record<string, string> = {
+  success: 'bg-success', warning: 'bg-warning', destructive: 'bg-destructive', primary: 'bg-primary', info: 'bg-info',
+}
 
-function StatsPage({ stats, range, onRangeChange }: { stats: StatsData | null; range: StatsRange; onRangeChange: (range: StatsRange) => void }) {
-  return <>
-    <div className="panel stats-toolbar">
-      <div><strong>统计窗口</strong><small>仅支持固定指标查询。</small></div>
-      <div className="stats-range" role="group" aria-label="统计时间范围">
-        {(['1h', '6h', '24h'] as StatsRange[]).map((value) => <button key={value} className={range === value ? 'is-active' : ''} onClick={() => onRangeChange(value)} aria-pressed={range === value}>{value}</button>)}
+function Stat({ label, value, unit, color }: { label: string; value: string; unit?: string; color: 'success' | 'warning' | 'destructive' | 'primary' | 'info' }) {
+  return (
+    <div className="card p-5">
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`h-2.5 w-2.5 rounded-full ${statDot[color]}`} />
+        <span className="text-xs text-muted-foreground">{label}</span>
+      </div>
+      <div className="text-2xl font-bold tabular-nums">
+        {value}{unit && <span className="text-sm font-normal text-muted-foreground ml-1">{unit}</span>}
       </div>
     </div>
-    <section className="metric-grid stats-kpi-grid" aria-label="统计速率">
-      {statsMetricMeta.map((metric) => {
-        const series = stats?.series[metric.key]
-        const available = series?.available === true && series.points.length > 0
-        const value = available ? `${formatNumber(latestPoint(series))}/s` : '—'
-        const description = available ? metric.description : 'Prometheus 暂无数据'
-        return <MetricCard key={metric.key} label={metric.label} value={value} sub={description} icon={metric.icon} accent={metric.accent} />
-      })}
-    </section>
-    <section className="stats-chart-grid" aria-label="统计趋势图">
-      {statsMetricMeta.map((metric) => <div className="panel stats-chart-panel" key={metric.key}>
-        <PanelHeader title={metric.label} kicker={`${metric.key.toUpperCase()} · ${range.toUpperCase()}`} action={<span className={`source-badge ${stats?.series[metric.key]?.available ? 'good' : 'muted'}`}><Activity size={13} /> {stats?.series[metric.key]?.available ? 'LIVE' : 'UNAVAILABLE'}</span>} />
-        {stats?.series[metric.key]?.available && stats.series[metric.key].points.length > 0
-          ? <TrendChart points={stats.series[metric.key].points} label={metric.description} chartID={metric.key} />
-          : <EmptyState icon={BarChart3} title="暂无时序数据" description={stats?.series[metric.key]?.error ?? '配置 Prometheus 后启用固定指标查询。'} />}
-      </div>)}
-    </section>
-    <div className="stats-footnote" role="note"><Activity size={15} /><span>速率为 Prometheus 查询结果；累计计数见总览。</span></div>
-  </>
+  )
 }
 
-function latestPoint(series?: DashboardSeries) {
-  return series?.points.at(-1)?.value ?? 0
+function EmptyState({ title, desc }: { title: string; desc?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
+      <CircleHelp size={36} className="opacity-30" />
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      {desc && <p className="text-xs">{desc}</p>}
+    </div>
+  )
 }
 
-function MetricCard({ label, value, sub, icon: Icon, accent }: { label: string; value: string; sub: string; icon: typeof Activity; accent: string }) {
-  return <article className={`metric-card accent-${accent}`}><div className="metric-top"><span>{label}</span><Icon size={18} /></div><strong>{value}</strong><small>{sub}</small></article>
-}
-
-function PanelHeader({ title, kicker, action }: { title: string; kicker?: string; action?: ReactNode }) {
-  return <div className="panel-header"><div>{kicker && <span>{kicker}</span>}<h2>{title}</h2></div>{action}</div>
-}
-
-function HealthRow({ name, status, detail, latency_ms }: { name: string; status: string; detail?: string; latency_ms?: number }) {
-  const good = status === 'ok' || status === 'configured'
-  return <div className="health-row"><div className={`health-icon ${good ? 'good' : status === 'disabled' ? 'muted' : 'bad'}`}>{good ? <Check size={14} /> : status === 'disabled' ? <CircleHelp size={14} /> : <AlertTriangle size={14} />}</div><div className="health-copy"><strong>{name.replaceAll('_', ' ')}</strong><small>{detail ?? status}</small></div><span className="health-latency">{latency_ms ? `${latency_ms}ms` : status.toUpperCase()}</span></div>
-}
-
-function TrendChart({ points, label = '拒绝速率', chartID = 'trend-chart' }: { points: Array<{ timestamp: number; value: number }>; label?: string; chartID?: string }) {
+function TrendChart({ points, label = '速率' }: { points: Array<{ timestamp: number; value: number }>; label?: string }) {
   const width = 720
   const height = 220
   const pad = 24
@@ -400,93 +334,117 @@ function TrendChart({ points, label = '拒绝速率', chartID = 'trend-chart' }:
     const y = height - pad - ((point.value - min) / range) * (height - pad * 2)
     return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
   }).join(' ')
-  const fillID = `${chartID}-fill`
-  return <div className="chart-wrap"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${label}趋势，共 ${points.length} 个点`}><defs><linearGradient id={fillID} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#4ee6d0" stopOpacity=".22" /><stop offset="100%" stopColor="#4ee6d0" stopOpacity="0" /></linearGradient></defs><line x1="24" x2="696" y1="44" y2="44" className="chart-gridline" /><line x1="24" x2="696" y1="110" y2="110" className="chart-gridline" /><line x1="24" x2="696" y1="176" y2="176" className="chart-gridline" /><path d={`${path} L 696 196 L 24 196 Z`} fill={`url(#${fillID})`} /><path d={path} className="chart-line" fill="none" /></svg><div className="chart-axis"><span>{formatDate(points[0]?.timestamp)}</span><span>{formatDate(points.at(-1)?.timestamp)}</span></div></div>
-}
-
-function RulesPage({ rules, auth, onError }: { rules: RuleList | null; auth: AuthState; onError: (reason: unknown) => void }) {
-  const [expanded, setExpanded] = useState<string | null>(rules?.chains[0]?.name ?? null)
-  const [preview, setPreview] = useState<RulePreview | null>(null)
-  const [form, setForm] = useState({ path: '/ubuntu-releases/example.iso', method: 'GET', ip: '192.0.2.10', pow_status: 'missing', pow_mode: '', is_protected: true })
-  const chains = rules?.chains ?? []
-  const runPreview = async () => {
-    try {
-      setPreview(await rpc<RulePreview>('rule.preview', { request: form }, auth))
-    } catch (reason) { onError(reason) }
-  }
-  return <section className="split-layout"><div className="panel rules-panel"><PanelHeader title="风险链" kicker={`${chains.length} CHAINS · READ ONLY`} /><div className="chain-list">{chains.map((chain) => <div className={`chain-card ${expanded === chain.name ? 'expanded' : ''}`} key={chain.name}><button className="chain-heading" onClick={() => setExpanded(expanded === chain.name ? null : chain.name)}><span className="chain-index">{chain.name.slice(0, 2)}</span><span><strong>{chain.name}</strong><small>{chain.rules.length} rules · policy {chain.policy.target}</small></span><ChevronRight size={17} /></button>{expanded === chain.name && <div className="chain-body"><div className="policy-callout"><span>DEFAULT POLICY</span><strong>{chain.policy.target}</strong><small>{chain.policy.reason || '未填写原因'} · {chain.policy.limit_rate || 'no rate limit'}</small></div>{chain.rules.map((rule, index) => <div className="rule-row" key={`${rule.name}-${index}`}><span className="rule-number">{String(index + 1).padStart(2, '0')}</span><div><strong>{rule.name}</strong><small>{rule.target} · {rule.reason || 'no reason'}</small></div><code>{Object.keys(rule.match).join(' + ') || 'always'}</code></div>)}</div>}</div>)}</div></div><div className="panel preview-panel"><PanelHeader title="规则预览" kicker="DRY RUN · NO SIDE EFFECTS" /><div className="form-stack"><Field label="PATH"><input value={form.path} onChange={(event) => setForm({ ...form, path: event.target.value })} /></Field><div className="form-two"><Field label="METHOD"><input value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value })} /></Field><Field label="CLIENT IP"><input value={form.ip} onChange={(event) => setForm({ ...form, ip: event.target.value })} /></Field></div><div className="form-two"><Field label="POW STATUS"><select value={form.pow_status} onChange={(event) => setForm({ ...form, pow_status: event.target.value })}><option value="missing">missing</option><option value="valid">valid</option><option value="invalid">invalid</option><option value="expired">expired</option></select></Field><Field label="POW MODE"><input value={form.pow_mode} placeholder="generic / ip_bound" onChange={(event) => setForm({ ...form, pow_mode: event.target.value })} /></Field></div><label className="check-field"><input type="checkbox" checked={form.is_protected} onChange={(event) => setForm({ ...form, is_protected: event.target.checked })} /><span>标记为受保护路径</span></label><button className="primary-button" onClick={() => void runPreview()}><TerminalSquare size={16} /> 执行模拟</button></div>{preview && <div className={`preview-result ${preview.ok ? 'ok' : 'bad'}`}><div className="result-top"><span>{preview.ok ? 'DECISION' : 'ERROR'}</span><strong>{preview.decision?.target ?? preview.error}</strong></div>{preview.decision && <p>{preview.decision.reason} · {preview.decision.chain}:{preview.decision.rule_name || 'policy'}</p>}{preview.trace && <div className="trace-list">{preview.trace.map((step, index) => <code key={`${step.chain}-${step.rule}-${index}`} className={step.matched ? 'matched' : ''}>{step.matched ? '✓' : '·'} {step.chain}:{step.rule}</code>)}</div>}</div>}</div></section>
-}
-
-function TokensPage({ auth, onError }: { auth: AuthState; onError: (reason: unknown) => void }) {
-  const [signID, setSignID] = useState('')
-  const [result, setResult] = useState<TokenGet | null>(null)
-  const [searching, setSearching] = useState(false)
-  const searchToken = async () => { setSearching(true); try { setResult(await rpc<TokenGet>('token.get', { sign_id: signID }, auth)) } catch (reason) { onError(reason) } finally { setSearching(false) } }
-  return <section className="single-layout"><div className="panel lookup-panel"><PanelHeader title="查询使用记录" kicker="GENERIC MODE / SIGN ID" /><div className="lookup-form"><div className="input-with-button"><Search size={18} /><input value={signID} placeholder="输入 64 字符 sign ID" aria-label="sign ID" onChange={(event) => setSignID(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void searchToken() }} /><button className="primary-button" onClick={() => void searchToken()} disabled={searching || !signID.trim()}>{searching ? <RefreshCw size={16} className="spin" /> : <Search size={16} />} 查询</button></div><p className="helper-text"><LockKeyhole size={14} /> 服务端不会返回原始 sign、token hash、User-Agent 或 IP 地址。</p></div></div>{result && (result.found && result.token ? <div className="panel token-result"><PanelHeader title="Usage record" kicker="RECORD FOUND" action={<span className="source-badge good"><Check size={13} /> FOUND</span>} /><div className="record-grid"><RecordValue label="SIGN ID" value={result.token.id} mono /><RecordValue label="MODE" value={result.token.mode} /><RecordValue label="PATH" value={result.token.path} mono /><RecordValue label="USAGE" value={`${result.token.uses} / ${result.token.max_uses}`} /><RecordValue label="EXPIRES" value={formatDate(result.token.expires_at)} /><RecordValue label="IP HINT" value={result.token.ip_hint || '—'} mono /></div></div> : <EmptyState icon={Search} title="没有找到记录" description="确认 sign ID 完整且该 generic token 已至少被验证一次。" />)}</section>
-}
-
-function RecordValue({ label, value, mono }: { label: string; value: string; mono?: boolean }) { return <div className="record-value"><span>{label}</span><strong className={mono ? 'mono' : ''}>{value}</strong></div> }
-
-function PendingPage({ pending, auth, onError, onChanged }: { pending: PendingList | null; auth: AuthState; onError: (reason: unknown) => void; onChanged: (message: string) => Promise<void> }) {
-  const entries = pending?.entries ?? []
-  const [dialog, setDialog] = useState<{ mode: 'add' | 'unblock'; fingerprint?: string } | null>(null)
-  const [form, setForm] = useState({ ip: '', confirm_ip: '', ttl_seconds: '3600', reason: '' })
-  const [submitting, setSubmitting] = useState(false)
-  const [operationError, setOperationError] = useState('')
-
-  const openDialog = (mode: 'add' | 'unblock', fingerprint?: string) => {
-    setForm({ ip: '', confirm_ip: '', ttl_seconds: '3600', reason: '' })
-    setOperationError('')
-    setDialog({ mode, fingerprint })
-  }
-
-  const submit = async () => {
-    if (!dialog) return
-    setSubmitting(true)
-    setOperationError('')
-    try {
-      const response = dialog.mode === 'add'
-        ? await rpc<RiskBlockMutation>('risk.blocks.add', {
-          ip: form.ip,
-          confirm_ip: form.confirm_ip,
-          ttl_seconds: Number(form.ttl_seconds),
-          reason: form.reason,
-        }, auth)
-        : await rpc<RiskBlockMutation>('risk.blocks.unblock', {
-          ip: form.ip,
-          confirm_ip: form.confirm_ip,
-        }, auth)
-      const stillAutomatic = dialog.mode === 'unblock' && response.entry.blocked && response.entry.source === 'automatic'
-      setDialog(null)
-      await onChanged(stillAutomatic
-        ? '人工阻断已解除，但自动 Pending 阻断仍在生效'
-        : dialog.mode === 'add' ? '人工 IP Block 已应用' : '人工 IP Block 已解除')
-    } catch (reason) {
-      setOperationError(reason instanceof Error ? reason.message : '操作失败')
-      if (reason instanceof AuthRequiredError) onError(reason)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const mutationEnabled = pending?.mutations_enabled ?? false
-  return <section className="single-layout">
-    <div className="panel operation-note">
-      <div><Ban size={18} /><span><strong>实例级紧急阻断</strong><small>人工 Block 高于 bypass_all；状态不跨副本，重启后丢失。</small></span></div>
-      <button className="danger-button" onClick={() => openDialog('add')} disabled={!mutationEnabled} title={mutationEnabled ? '添加人工 IP Block' : '需要显式开启 Admin mutation 与 IP block'}><Ban size={16} /> 添加 Block</button>
+  return <div>
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" role="img" aria-label={`${label}趋势`}>
+      {[44, 110, 176].map((y) => <line key={y} x1={pad} x2={width - pad} y1={y} y2={y} className="stroke-border" strokeDasharray="4 7" />)}
+      <path d={`${path} L ${width - pad} ${height - pad} L ${pad} ${height - pad} Z`} fill="var(--chart-c2)" />
+      <path d={path} fill="none" stroke="var(--chart-c7)" strokeWidth={2.5} strokeLinecap="round" />
+    </svg>
+    <div className="flex justify-between text-xs text-faint-foreground tabular-nums">
+      <span>{formatDate(points[0]?.timestamp)}</span>
+      <span>{formatDate(points.at(-1)?.timestamp)}</span>
     </div>
-    <div className="panel">
-      <PanelHeader title="Pending / Block 状态" kicker={`SCOPE: ${pending?.scope?.toUpperCase() ?? 'INSTANCE'}`} action={<span className={`source-badge ${mutationEnabled ? 'good' : 'muted'}`}><TimerReset size={13} /> {mutationEnabled ? 'MUTATIONS ON' : 'MUTATIONS OFF'}</span>} />
-      {entries.length === 0 ? <EmptyState icon={TimerReset} title="当前没有活跃 Pending 或 Block" description={mutationEnabled ? '可通过上方操作添加实例级人工 IP Block。' : '管理写操作默认关闭；启用后可添加人工 IP Block。'} /> : <div className="data-table-wrap"><table className="block-table"><thead><tr><th>IP 指纹</th><th>Pending</th><th>来源 / 原因</th><th>状态</th><th>阻断截止</th><th>操作者</th><th>操作</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.ip}><td className="mono">{entry.ip}</td><td>{entry.pending}</td><td><strong>{entry.source || 'pending'}</strong><small className="table-subtext">{entry.reason || '—'}</small></td><td><span className={`table-status ${entry.blocked ? 'danger' : 'good'}`}><span /> {entry.blocked ? 'BLOCKED' : 'ACTIVE'}</span></td><td>{formatDate(entry.blocked_until)}</td><td>{entry.actor || '—'}</td><td><button className="table-action" disabled={!mutationEnabled || !entry.source?.includes('manual')} onClick={() => openDialog('unblock', entry.ip)}>解除人工 Block</button></td></tr>)}</tbody></table></div>}
-    </div>
-    {dialog && <BlockMutationModal mode={dialog.mode} expectedFingerprint={dialog.fingerprint} form={form} setForm={setForm} submitting={submitting} error={operationError} onSubmit={() => void submit()} onClose={() => setDialog(null)} />}
-  </section>
+  </div>
 }
 
-function BlockMutationModal({ mode, expectedFingerprint, form, setForm, submitting, error, onSubmit, onClose }: { mode: 'add' | 'unblock'; expectedFingerprint?: string; form: { ip: string; confirm_ip: string; ttl_seconds: string; reason: string }; setForm: (value: { ip: string; confirm_ip: string; ttl_seconds: string; reason: string }) => void; submitting: boolean; error: string; onSubmit: () => void; onClose: () => void }) {
-  const isAdd = mode === 'add'
-  const ready = form.ip.trim() !== '' && form.confirm_ip.trim() !== '' && form.ip.trim() === form.confirm_ip.trim() && (!isAdd || (form.reason.trim() !== '' && Number(form.ttl_seconds) > 0))
-  return <div className="modal-scrim"><section className="auth-modal block-modal" role="dialog" aria-modal="true" aria-labelledby="block-title"><button className="modal-close icon-button" aria-label="关闭" onClick={onClose}><X size={18} /></button><div className="auth-icon danger-icon"><Ban size={22} /></div><span className="eyebrow">ADMIN MUTATION / INSTANCE</span><h2 id="block-title">{isAdd ? '添加人工 IP Block' : '解除人工 IP Block'}</h2><p>{isAdd ? '该操作优先于 bypass_all，并只作用于当前后端实例。' : '只清除人工 Block；仍有效的自动 Pending Block 不会被解除。'}</p>{expectedFingerprint && <div className="fingerprint-callout"><span>目标指纹</span><code>{expectedFingerprint}</code></div>}<div className="form-two block-form"><Field label="目标 IP"><input value={form.ip} autoFocus placeholder="192.0.2.1" onChange={(event) => setForm({ ...form, ip: event.target.value })} /></Field><Field label="再次输入 IP 确认"><input value={form.confirm_ip} placeholder="必须与目标 IP 完全一致" onChange={(event) => setForm({ ...form, confirm_ip: event.target.value })} /></Field></div>{isAdd && <><div className="form-two"><Field label="TTL（秒）"><input type="number" min="1" value={form.ttl_seconds} onChange={(event) => setForm({ ...form, ttl_seconds: event.target.value })} /></Field><Field label="原因"><input value={form.reason} maxLength={256} placeholder="必填，不得包含换行" onChange={(event) => setForm({ ...form, reason: event.target.value })} /></Field></div></>}{form.ip && form.confirm_ip && form.ip !== form.confirm_ip && <div className="inline-error" role="alert">两次输入的 IP 不一致。</div>}{error && <div className="inline-error" role="alert">{error}</div>}<div className="modal-actions"><button className="secondary-button" onClick={onClose} disabled={submitting}>取消</button><button className="danger-button" onClick={onSubmit} disabled={!ready || submitting}>{submitting ? <RefreshCw size={16} className="spin" /> : <Ban size={16} />} {isAdd ? '确认 Block' : '确认解除'}</button></div></section></div>
+function OverviewPage({ summary, series, health }: { summary: DashboardSummary | null; series: DashboardSeries | null; health: SystemHealth | null }) {
+  const metrics = summary?.metrics
+  return <>
+    <div className="grid gap-4 grid-cols-2 xl:grid-cols-4">
+      <Stat label="PoW 校验" value={formatNumber(metrics?.pow_verify_total ?? 0)} color="info" />
+      <Stat label="放行" value={formatNumber(metrics?.pow_allowed_total ?? 0)} color="success" />
+      <Stat label="拒绝" value={formatNumber(metrics?.pow_denied_total ?? 0)} color="destructive" />
+      <Stat label="活跃签名" value={formatNumber(metrics?.active_signatures ?? 0)} color="primary" />
+    </div>
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className="card lg:col-span-2">
+        <div className="card-header flex items-center justify-between">
+          <div>
+            <div className="card-title">拒绝速率</div>
+            <div className="card-desc">pow_denied_total</div>
+          </div>
+          <span className={`badge ${series?.available ? 'bg-success-soft text-success-foreground' : 'bg-muted text-muted-foreground'}`}>
+            <Activity size={12} /> {series?.available ? '有数据' : '暂无数据'}
+          </span>
+        </div>
+        <div className="card-body">
+          {series?.available && series.points.length > 0
+            ? <TrendChart points={series.points} label="拒绝" />
+            : <EmptyState title="暂无时序数据" desc={series?.error ?? '未配置 Prometheus'} />}
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-header flex items-center justify-between">
+          <div className="card-title">依赖健康</div>
+          <span className={`badge ${health === null ? 'bg-muted text-muted-foreground' : health.ok ? 'bg-success-soft text-success-foreground' : 'bg-destructive-soft text-destructive-foreground'}`}>
+            {health === null ? '加载中' : health.ok ? '全部正常' : '需检查'}
+          </span>
+        </div>
+        <div className="card-body !px-0">
+          {(health?.components ?? []).map((component) => {
+            const good = component.status === 'ok' || component.status === 'configured'
+            return (
+              <div key={component.name} className="flex items-center gap-3 px-6 py-3 border-b border-separator last:border-b-0">
+                <span className={`h-2 w-2 rounded-full ${good ? 'bg-success' : component.status === 'disabled' ? 'bg-muted-foreground/40' : 'bg-destructive'}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm capitalize">{component.name.replaceAll('_', ' ')}</div>
+                  {component.detail && <div className="text-xs text-muted-foreground truncate">{component.detail}</div>}
+                </div>
+                <span className="text-xs text-faint-foreground tabular-nums">{component.latency_ms ? `${component.latency_ms}ms` : component.status}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  </>
+}
+
+const statsMetricMeta = [
+  { key: 'pow_verify_total', label: '验证请求', color: 'info' },
+  { key: 'pow_allowed_total', label: '允许通过', color: 'success' },
+  { key: 'pow_denied_total', label: '拒绝请求', color: 'destructive' },
+  { key: 'risk_decision_total', label: '风险决策', color: 'warning' },
+] as const
+
+function StatsPage({ stats, range, onRangeChange }: { stats: StatsData | null; range: StatsRange; onRangeChange: (range: StatsRange) => void }) {
+  return <>
+    <PageHeader title="统计" actions={
+      <div className="flex rounded-lg border border-border overflow-hidden">
+        {(['1h', '6h', '24h'] as StatsRange[]).map((value) => (
+          <button key={value} className={`px-3 py-1.5 text-sm transition ${range === value ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'}`} onClick={() => onRangeChange(value)}>{value}</button>
+        ))}
+      </div>
+    } />
+    <div className="grid gap-4 grid-cols-2 xl:grid-cols-4">
+      {statsMetricMeta.map((metric) => {
+        const series = stats?.series[metric.key]
+        const available = series?.available === true && series.points.length > 0
+        return <Stat key={metric.key} label={metric.label} value={available ? `${formatNumber(series.points.at(-1)?.value ?? 0)}/s` : '—'} color={metric.color} />
+      })}
+    </div>
+    <div className="grid gap-4 lg:grid-cols-2">
+      {statsMetricMeta.map((metric) => {
+        const series = stats?.series[metric.key]
+        return <div className="card" key={metric.key}>
+          <div className="card-header flex items-center justify-between">
+            <div>
+              <div className="card-title">{metric.label}</div>
+              <div className="card-desc">{metric.key}</div>
+            </div>
+            <span className={`badge ${series?.available ? 'bg-success-soft text-success-foreground' : 'bg-muted text-muted-foreground'}`}>
+              <Activity size={12} /> {series?.available ? 'LIVE' : 'N/A'}
+            </span>
+          </div>
+          <div className="card-body">
+            {series?.available && series.points.length > 0
+              ? <TrendChart points={series.points} label={metric.label} />
+              : <EmptyState title="暂无数据" desc={series?.error ?? '未配置 Prometheus'} />}
+          </div>
+        </div>
+      })}
+    </div>
+  </>
 }
 
 function AuditPage({ audit }: { audit: AuditList | null }) {
@@ -500,23 +458,69 @@ function AuditPage({ audit }: { audit: AuditList | null }) {
     if (resultFilter === 'error' && event.ok) return false
     return true
   })
-  return <section className="single-layout">
-    <div className="panel">
-      <PanelHeader title="审计事件" kicker="ADMIN_AUDIT · LOKI" action={<span className={`source-badge ${audit?.available ? 'good' : 'muted'}`}><Activity size={13} /> {audit?.available ? 'LIVE' : 'UNAVAILABLE'}</span>} />
-      <div className="audit-toolbar">
-        <label><span>动作</span><select value={actionFilter} onChange={(event) => setActionFilter(event.target.value)}><option value="">全部动作</option>{actions.map((action) => <option key={action} value={action}>{action}</option>)}</select></label>
-        <label><span>结果</span><select value={resultFilter} onChange={(event) => setResultFilter(event.target.value as 'all' | 'ok' | 'error')}><option value="all">全部结果</option><option value="ok">成功</option><option value="error">失败</option></select></label>
-        <span className="audit-count">显示 {filtered.length} / {events.length} 条 · 最近 24 小时</span>
+  return <div className="card">
+    <div className="card-header flex flex-wrap items-center gap-3">
+      <div>
+        <div className="card-title">审计事件</div>
+        <div className="card-desc">管理操作记录 · 最近 100 条</div>
       </div>
-      {filtered.length === 0 ? <EmptyState icon={FileSearch} title="没有可展示的审计事件" description={audit?.error ?? (events.length > 0 ? '当前筛选条件没有匹配事件。' : '配置 Loki 后启用固定 LogQL 查询。')} /> : <div className="data-table-wrap"><table><thead><tr><th>时间</th><th>动作</th><th>操作者</th><th>目标 / 原因</th><th>结果</th><th>请求 ID</th><th>详情</th></tr></thead><tbody>{filtered.map((event, index) => <tr key={`${event.timestamp}-${event.action}-${index}`}><td className="mono">{formatDate(event.timestamp)}</td><td><strong>{event.action}</strong></td><td>{event.actor}</td><td><span className="mono">{event.target || '—'}</span><small className="table-subtext">{event.reason || event.source || '—'}</small></td><td><span className={`table-status ${event.ok ? 'good' : 'danger'}`}><span /> {event.ok ? 'OK' : event.code || 'ERROR'}</span></td><td className="mono">{event.request_id || '—'}</td><td>{event.detail || '—'}</td></tr>)}</tbody></table></div>}
+      <div className="ml-auto flex items-center gap-2 text-sm">
+        <select className="input !w-auto" value={actionFilter} onChange={(event) => setActionFilter(event.target.value)}>
+          <option value="">全部动作</option>
+          {actions.map((action) => <option key={action} value={action}>{action}</option>)}
+        </select>
+        <select className="input !w-auto" value={resultFilter} onChange={(event) => setResultFilter(event.target.value as 'all' | 'ok' | 'error')}>
+          <option value="all">全部结果</option>
+          <option value="ok">成功</option>
+          <option value="error">失败</option>
+        </select>
+      </div>
     </div>
-  </section>
+    {filtered.length === 0 ? <EmptyState title="没有审计事件" desc={audit?.error ?? '未配置 Loki'} /> : (
+      <div className="table-wrap !rounded-none !border-x-0 !border-b-0">
+        <table className="table">
+          <thead><tr><th>时间</th><th>动作</th><th>操作者</th><th>结果</th><th>原因 / 详情</th><th>请求 ID</th></tr></thead>
+          <tbody>{filtered.map((event, index) => (
+            <tr key={`${event.timestamp}-${event.action}-${index}`}>
+              <td className="tabular-nums text-muted-foreground">{formatDate(event.timestamp)}</td>
+              <td className="font-medium">{event.action}</td>
+              <td>{event.actor}</td>
+              <td><span className={`badge ${event.ok ? 'bg-success-soft text-success-foreground' : 'bg-destructive-soft text-destructive-foreground'}`}>{event.ok ? 'OK' : event.code || 'ERROR'}</span></td>
+              <td className="max-w-64 truncate text-muted-foreground" title={event.detail || event.reason}>{event.reason || event.target || event.detail || '—'}</td>
+              <td className="tabular-nums text-faint-foreground font-mono text-xs">{event.request_id || '—'}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    )}
+  </div>
 }
 
-function ConfigPage({ auth, onError, onToast, refreshNonce }: { auth: AuthState; onError: (reason: unknown) => void; onToast: (message: string) => void; refreshNonce: number }) { return <ConfigManagement auth={auth} onError={onError} onToast={onToast} refreshNonce={refreshNonce} /> }
-
-function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}</label> }
-function EmptyState({ icon: Icon, title, description }: { icon: typeof Activity; title: string; description: string }) { return <div className="empty-state"><div className="empty-icon"><Icon size={22} /></div><strong>{title}</strong><p>{description}</p></div> }
-function AuthModal({ authForm, setAuthForm, onSubmit, onClose }: { authForm: { token: string; remember: boolean }; setAuthForm: (value: { token: string; remember: boolean }) => void; onSubmit: () => void; onClose: () => void }) { return <div className="modal-scrim"><section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button type="button" className="modal-close icon-button" aria-label="关闭" onClick={onClose}><X size={18} /></button><h2 id="auth-title">登录</h2><form onSubmit={(event) => { event.preventDefault(); onSubmit() }}><input className="visually-hidden" name="username" autoComplete="username" value="admin-token" readOnly tabIndex={-1} aria-hidden="true" /><Field label="管理 Token"><input name="password" type="password" autoComplete="current-password" value={authForm.token} autoFocus onChange={(event) => setAuthForm({ ...authForm, token: event.target.value })} /></Field><label className="check-field auth-remember"><input type="checkbox" checked={authForm.remember} onChange={(event) => setAuthForm({ ...authForm, remember: event.target.checked })} /> 7 天内自动登录</label><button type="submit" className="primary-button full-button">登录</button></form></section></div> }
+function AuthModal({ authForm, setAuthForm, onSubmit, onClose }: { authForm: { token: string; remember: boolean }; setAuthForm: (value: { token: string; remember: boolean }) => void; onSubmit: () => void; onClose: () => void }) {
+  return <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-backdrop" onClick={onClose}>
+    <section className="w-full max-w-sm rounded-xl border border-border bg-overlay text-overlay-foreground shadow-pop p-6" role="dialog" aria-modal="true" aria-label="登录" onClick={(event) => event.stopPropagation()}>
+      <div className="flex items-center gap-2.5 mb-5">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground"><LockKeyhole size={16} /></div>
+        <div>
+          <div className="font-semibold">登录</div>
+          <div className="text-xs text-muted-foreground">Mirrors WAF Admin</div>
+        </div>
+        <button className="ml-auto text-muted-foreground hover:text-foreground" onClick={onClose} aria-label="关闭"><X size={16} /></button>
+      </div>
+      <form onSubmit={(event) => { event.preventDefault(); onSubmit() }}>
+        <input className="visually-hidden" name="username" autoComplete="username" value="admin-token" readOnly tabIndex={-1} aria-hidden="true" />
+        <label className="block mb-4">
+          <span className="block mb-1.5 text-xs font-medium text-muted-foreground">管理 Token</span>
+          <input className="input" name="password" type="password" autoComplete="current-password" value={authForm.token} autoFocus onChange={(event) => setAuthForm({ ...authForm, token: event.target.value })} />
+        </label>
+        <label className="flex items-center gap-2 mb-5 text-sm text-muted-foreground cursor-pointer">
+          <input type="checkbox" className="accent-[var(--primary)]" checked={authForm.remember} onChange={(event) => setAuthForm({ ...authForm, remember: event.target.checked })} />
+          7 天内自动登录
+        </label>
+        <button type="submit" className="btn-primary w-full">登录</button>
+      </form>
+    </section>
+  </div>
+}
 
 export default App

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, Check, FileCode2, RefreshCw, Undo2, X } from 'lucide-react'
+import { AlertTriangle, Check, RefreshCw, Undo2, X } from 'lucide-react'
 import { AuthRequiredError, RPCError, rpc } from '../api'
 import type {
   AuthState,
@@ -309,55 +309,83 @@ export default function ConfigManagement({ auth, onError, onToast, refreshNonce 
   const canEdit = managed && capabilities.mutations_enabled && capabilities.apply_enabled
   const busy = operation !== null
 
-  if (initializing) return <div className="config-loading" aria-live="polite"><RefreshCw size={18} className="spin" /> 正在加载配置、状态和历史…</div>
+  if (initializing) return <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground"><RefreshCw size={16} className="animate-spin" /> 加载配置…</div>
 
-  return <section className="config-management">
-    <div className="config-status-grid" aria-label="配置状态">
+  return <section className="space-y-6">
+    <div className="grid gap-4 grid-cols-2 xl:grid-cols-4">
       <StatusCard label="MANAGED" value={managed ? 'YES' : 'NO'} tone={managed ? 'good' : 'danger'} />
       <StatusCard label="REVISION" value={currentRevision ? `#${currentRevision}` : '—'} />
       <StatusCard label="PENDING RESTART" value={pendingRestart ? 'YES' : 'NO'} tone={pendingRestart ? 'warning' : 'good'} />
       <StatusCard label="DRAFT" value={draft ? `r${draft.draft_revision}` : 'NONE'} tone={draft?.validated ? 'good' : draft ? 'warning' : undefined} />
     </div>
 
-    <div className="panel capability-strip">
-      <div className="capability-list">
-        <CapabilityBadge label="MANAGED" enabled={capabilities.managed} />
-        <CapabilityBadge label="MUTATIONS" enabled={capabilities.mutations_enabled} />
-        <CapabilityBadge label="APPLY" enabled={capabilities.apply_enabled} />
-        <CapabilityBadge label="HISTORY" enabled={capabilities.history_enabled} />
-      </div>
+    <div className="card px-6 py-3 flex flex-wrap items-center gap-2">
+      <span className="text-xs text-muted-foreground mr-1">能力</span>
+      <CapabilityBadge label="MANAGED" enabled={capabilities.managed} />
+      <CapabilityBadge label="MUTATIONS" enabled={capabilities.mutations_enabled} />
+      <CapabilityBadge label="APPLY" enabled={capabilities.apply_enabled} />
+      <CapabilityBadge label="HISTORY" enabled={capabilities.history_enabled} />
     </div>
 
-    {notice && <div className="config-notice" role="alert"><AlertTriangle size={17} /><span>{notice}</span><button type="button" onClick={() => setNotice('')} aria-label="关闭提示"><X size={15} /></button></div>}
-    {!canEdit && <div className="config-readonly-note"><AlertTriangle size={17} /><strong>只读模式</strong></div>}
+    {notice && <div className="card border-warning/40 px-6 py-4 flex items-center gap-3 text-sm" role="alert"><AlertTriangle size={16} className="text-warning flex-none" /><span className="flex-1">{notice}</span><button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => setNotice('')} aria-label="关闭提示"><X size={15} /></button></div>}
+    {!canEdit && <div className="card border-warning/40 px-6 py-4 flex items-center gap-3 text-sm"><AlertTriangle size={16} className="text-warning flex-none" /><span className="font-medium">只读模式</span></div>}
 
-    <div className="config-workspace">
-      <div className="panel config-editor-panel">
-        <div className="panel-header"><h2>配置草稿</h2><div className="editor-state"><span className={editorDirty ? 'dirty' : draft?.validated ? 'valid' : ''} />{editorDirty ? 'UNSAVED' : draft?.validated ? 'VALIDATED' : draft ? 'SAVED' : 'CURRENT'}</div></div>
-        <VisualConfigEditor yamlText={yaml} disabled={!canEdit} onChange={(next) => { setYaml(next); setValidation(null); setDiff(null); setNotice('') }} />
-        <div className="config-actions">
-          <button type="button" className="secondary-button" onClick={() => void refreshState()} disabled={busy}><RefreshCw size={16} className={operation === 'confirm' ? 'spin' : ''} /> 刷新状态</button>
-          <button type="button" className="secondary-button" onClick={() => void saveDraft()} disabled={!canEdit || !yaml.trim() || busy}><FileCode2 size={16} /> 保存草稿</button>
-          <button type="button" className="secondary-button" onClick={() => void discardDraft()} disabled={!canEdit || !draft || busy}><X size={16} /> 丢弃草稿</button>
-          <button type="button" className="secondary-button" onClick={() => void validateDraft()} disabled={!canEdit || !yaml.trim() || busy}><Check size={16} /> 校验草稿</button>
-          <button type="button" className="primary-button" onClick={() => void previewDiff()} disabled={!canEdit || !yaml.trim() || busy}><FileCode2 size={16} /> 生成 Diff</button>
+    <div className="grid gap-4 xl:grid-cols-2">
+      <div className="card flex flex-col">
+        <div className="card-header flex items-center justify-between">
+          <div className="card-title">配置草稿</div>
+          <span className={`badge ${editorDirty ? 'bg-warning-soft text-warning-foreground' : draft?.validated ? 'bg-success-soft text-success-foreground' : 'bg-muted text-muted-foreground'}`}>
+            {editorDirty ? 'UNSAVED' : draft?.validated ? 'VALIDATED' : draft ? 'SAVED' : 'CURRENT'}
+          </span>
         </div>
-        {validation && <div className={`validation-box ${validation.valid ? 'ok' : 'bad'}`} role="status"><strong>{validation.valid ? '草稿通过校验' : '草稿校验失败'}</strong>{validation.error && <p>{validation.error}</p>}{validation.problems?.map((problem, index) => <p key={`${problem}-${index}`}>· {problem}</p>)}</div>}
+        <VisualConfigEditor yamlText={yaml} disabled={!canEdit} onChange={(next) => { setYaml(next); setValidation(null); setDiff(null); setNotice('') }} />
+        <div className="flex flex-wrap gap-2 px-6 py-4 border-t border-border mt-auto">
+          <button type="button" className="btn-outline" onClick={() => void refreshState()} disabled={busy}><RefreshCw size={15} className={operation === 'confirm' ? 'animate-spin' : ''} /> 刷新</button>
+          <button type="button" className="btn-outline" onClick={() => void saveDraft()} disabled={!canEdit || !yaml.trim() || busy}>保存草稿</button>
+          <button type="button" className="btn-outline" onClick={() => void discardDraft()} disabled={!canEdit || !draft || busy}>丢弃</button>
+          <button type="button" className="btn-outline" onClick={() => void validateDraft()} disabled={!canEdit || !yaml.trim() || busy}>校验</button>
+          <button type="button" className="btn-primary" onClick={() => void previewDiff()} disabled={!canEdit || !yaml.trim() || busy}>生成 Diff</button>
+        </div>
+        {validation && <div className={`mx-6 mb-4 rounded-lg border px-4 py-3 text-sm ${validation.valid ? 'border-success/30 bg-success-soft text-success-foreground' : 'border-destructive/30 bg-destructive-soft text-destructive-foreground'}`} role="status">
+          <div className="font-medium">{validation.valid ? '草稿通过校验' : '草稿校验失败'}</div>
+          {validation.error && <p className="mt-1 text-xs opacity-80">{validation.error}</p>}
+          {validation.problems?.map((problem, index) => <p key={`${problem}-${index}`} className="mt-1 text-xs opacity-80">· {problem}</p>)}
+        </div>}
       </div>
 
-      <div className="panel config-diff-panel">
-        <div className="panel-header"><h2>差异预览</h2>{diff && <DangerBadge danger={diff.danger} />}</div>
+      <div className="card">
+        <div className="card-header flex items-center justify-between">
+          <div className="card-title">差异预览</div>
+          {diff && <DangerBadge danger={diff.danger} />}
+        </div>
         {diff ? <>
           <DiffSummary diff={diff} />
           <DiffChanges diff={diff} />
-          <div className="diff-actions"><button type="button" className={diff.danger === 'normal' ? 'primary-button' : 'danger-button'} onClick={openApplyConfirmation} disabled={!diff.preview_id || diff.changes.length === 0 || editorDirty || busy}><Check size={16} /> Apply</button></div>
-        </> : <div className="config-empty"><strong>尚未生成差异</strong></div>}
+          <div className="flex justify-end px-6 py-4"><button type="button" className={diff.danger === 'normal' ? 'btn-primary' : 'btn-danger'} onClick={openApplyConfirmation} disabled={!diff.preview_id || diff.changes.length === 0 || editorDirty || busy}><Check size={15} /> Apply</button></div>
+        </> : <EmptyState title="尚未生成差异" />}
       </div>
     </div>
 
-    <div className="panel config-history-panel">
-      <div className="panel-header"><h2>配置历史</h2><span className={`source-badge ${capabilities.history_enabled ? 'good' : 'muted'}`}>{history.length}</span></div>
-      {history.length === 0 ? <div className="config-empty"><strong>暂无记录</strong></div> : <div className="data-table-wrap"><table className="config-history-table"><thead><tr><th>修订</th><th>时间 / 动作</th><th>变更</th><th>操作者 / 原因</th><th>影响</th><th>操作</th></tr></thead><tbody>{history.map((entry) => <tr key={entry.revision}><td><strong>#{entry.revision}</strong><small className="table-subtext">parent #{entry.parent_revision || '—'}</small></td><td><strong>{entry.action.toUpperCase()}</strong><small className="table-subtext">{formatDate(entry.created_at)}</small></td><td>{entry.changed}</td><td>{entry.actor || '—'}<small className="table-subtext" title={entry.reason}>{entry.reason || (entry.rollback_target ? `rollback → #${entry.rollback_target}` : '—')}</small></td><td><DangerBadge danger={entry.danger || 'normal'} />{entry.restart_required && <small className="restart-label">RESTART</small>}</td><td><button type="button" className="table-action" disabled={!capabilities.apply_enabled || entry.revision === currentRevision || busy} onClick={() => void previewRollback(entry)}><Undo2 size={13} /> 回滚</button></td></tr>)}</tbody></table></div>}
+    <div className="card">
+      <div className="card-header flex items-center justify-between">
+        <div className="card-title">配置历史</div>
+        <span className="badge bg-muted text-muted-foreground">{history.length}</span>
+      </div>
+      {history.length === 0 ? <EmptyState title="暂无记录" /> : (
+        <div className="table-wrap !rounded-none !border-x-0 !border-b-0">
+          <table className="table"><thead><tr><th>修订</th><th>动作</th><th>变更</th><th>操作者 / 原因</th><th>影响</th><th>操作</th></tr></thead>
+          <tbody>{history.map((entry) => (
+            <tr key={entry.revision}>
+              <td><span className="font-medium">#{entry.revision}</span><span className="block text-xs text-faint-foreground">parent #{entry.parent_revision || '—'}</span></td>
+              <td><span className="font-medium">{entry.action.toUpperCase()}</span><span className="block text-xs text-faint-foreground">{formatDate(entry.created_at)}</span></td>
+              <td className="tabular-nums">{entry.changed}</td>
+              <td>{entry.actor || '—'}<span className="block text-xs text-faint-foreground truncate max-w-48" title={entry.reason}>{entry.reason || (entry.rollback_target ? `rollback → #${entry.rollback_target}` : '—')}</span></td>
+              <td><DangerBadge danger={entry.danger || 'normal'} />{entry.restart_required && <span className="block mt-1 text-xs text-warning-foreground">RESTART</span>}</td>
+              <td><button type="button" className="btn-outline !px-2.5 !py-1 text-xs" disabled={!capabilities.apply_enabled || entry.revision === currentRevision || busy} onClick={() => void previewRollback(entry)}><Undo2 size={12} /> 回滚</button></td>
+            </tr>
+          ))}</tbody></table>
+        </div>
+      )}
     </div>
 
     {confirmation && <ConfirmationModal confirmation={confirmation} submitting={operation === 'confirm'} onSubmit={(reason, phrase) => void submitConfirmation(reason, phrase)} onClose={() => setConfirmation(null)} />}
@@ -365,29 +393,63 @@ export default function ConfigManagement({ auth, onError, onToast, refreshNonce 
 }
 
 function StatusCard({ label, value, tone }: { label: string; value: string; tone?: 'good' | 'warning' | 'danger' }) {
-  return <article className={`config-status-card ${tone ? `is-${tone}` : ''}`}><span>{label}</span><strong>{value}</strong></article>
+  const toneCls = tone === 'good' ? 'text-success' : tone === 'warning' ? 'text-warning' : tone === 'danger' ? 'text-destructive' : 'text-foreground'
+  return <article className="card px-5 py-4"><span className="text-xs text-muted-foreground">{label}</span><strong className={`block mt-1 text-xl tabular-nums ${toneCls}`}>{value}</strong></article>
 }
 
 function CapabilityBadge({ label, enabled }: { label: string; enabled: boolean }) {
-  return <span className={`capability-badge ${enabled ? 'enabled' : ''}`}><span />{label}</span>
+  return <span className={`badge ${enabled ? 'bg-success-soft text-success-foreground' : 'bg-muted text-muted-foreground'}`}><span className={`h-1.5 w-1.5 rounded-full ${enabled ? 'bg-success' : 'bg-muted-foreground/40'}`} />{label}</span>
+}
+
+const dangerCls: Record<string, string> = {
+  normal: 'bg-success-soft text-success-foreground',
+  dangerous: 'bg-warning-soft text-warning-foreground',
+  critical: 'bg-destructive-soft text-destructive-foreground',
+}
+const dangerBorder: Record<string, string> = {
+  normal: 'border-l-success', dangerous: 'border-l-warning', critical: 'border-l-destructive',
 }
 
 function DangerBadge({ danger }: { danger: string }) {
-  return <span className={`danger-badge danger-${danger || 'normal'}`}>{(danger || 'normal').toUpperCase()}</span>
+  return <span className={`badge ${dangerCls[danger || 'normal']}`}>{(danger || 'normal').toUpperCase()}</span>
+}
+
+function EmptyState({ title }: { title: string }) {
+  return <div className="flex flex-col items-center justify-center gap-1 py-16 text-muted-foreground"><p className="text-sm">{title}</p></div>
 }
 
 function DiffSummary({ diff }: { diff: ConfigDiff }) {
-  return <div className="diff-summary"><div><span>BASE</span><strong>#{diff.base_revision}</strong></div><div><span>CHANGES</span><strong>{diff.changes.length}</strong></div><div><span>RESTART</span><strong>{diff.restart_required ? 'YES' : 'NO'}</strong></div></div>
+  return <div className="grid grid-cols-3 gap-px bg-border border-y border-border">
+    <div className="bg-surface px-4 py-2.5"><span className="block text-xs text-muted-foreground">BASE</span><span className="font-semibold tabular-nums">#{diff.base_revision}</span></div>
+    <div className="bg-surface px-4 py-2.5"><span className="block text-xs text-muted-foreground">CHANGES</span><span className="font-semibold tabular-nums">{diff.changes.length}</span></div>
+    <div className="bg-surface px-4 py-2.5"><span className="block text-xs text-muted-foreground">RESTART</span><span className={`font-semibold ${diff.restart_required ? 'text-warning' : ''}`}>{diff.restart_required ? 'YES' : 'NO'}</span></div>
+  </div>
 }
 
 function DiffChanges({ diff }: { diff: ConfigDiff }) {
-  if (diff.changes.length === 0) return <div className="config-empty compact"><Check size={22} /><strong>没有配置变化</strong><p>当前草稿与已生效配置一致。</p></div>
-  return <div className="diff-list">{diff.changes.map((change, index) => <article className={`diff-change danger-border-${change.danger}`} key={`${change.path}-${index}`}><div className="diff-change-heading"><code>{change.path || '(root)'}</code><span>{change.kind}</span></div><div className="diff-values"><DiffValue label="BEFORE" value={change.before} sensitive={change.sensitive} /><DiffValue label="AFTER" value={change.after} sensitive={change.sensitive} /></div><div className="diff-flags"><DangerBadge danger={change.danger} />{change.restart_required && <span className="restart-label">RESTART REQUIRED</span>}{change.sensitive && <span className="sensitive-label">REDACTED</span>}</div></article>)}</div>
+  if (diff.changes.length === 0) return <EmptyState title="没有配置变化" />
+  return <div className="p-4 space-y-2 max-h-96 overflow-auto">{diff.changes.map((change, index) => (
+    <article className={`rounded-lg border border-border border-l-2 ${dangerBorder[change.danger] || 'border-l-border'} bg-surface-secondary px-4 py-3`} key={`${change.path}-${index}`}>
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <code className="text-xs text-link break-all">{change.path || '(root)'}</code>
+        <span className="text-xs text-faint-foreground uppercase">{change.kind}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <DiffValue label="BEFORE" value={change.before} sensitive={change.sensitive} />
+        <DiffValue label="AFTER" value={change.after} sensitive={change.sensitive} />
+      </div>
+      <div className="flex flex-wrap items-center gap-2 mt-2">
+        <DangerBadge danger={change.danger} />
+        {change.restart_required && <span className="text-xs text-warning-foreground">RESTART</span>}
+        {change.sensitive && <span className="text-xs text-muted-foreground">REDACTED</span>}
+      </div>
+    </article>
+  ))}</div>
 }
 
 function DiffValue({ label, value, sensitive }: { label: string; value: unknown; sensitive: boolean }) {
   const display = sensitive ? '••••••••' : value === undefined ? '—' : typeof value === 'string' ? value : JSON.stringify(value, null, 2)
-  return <div><span>{label}</span><pre>{display}</pre></div>
+  return <div className="rounded-md bg-background px-3 py-2 min-w-0"><span className="block text-[10px] text-faint-foreground tracking-wider">{label}</span><pre className="mt-0.5 text-xs whitespace-pre-wrap break-all font-mono">{display}</pre></div>
 }
 
 function ConfirmationModal({ confirmation, submitting, onSubmit, onClose }: {
@@ -403,5 +465,39 @@ function ConfirmationModal({ confirmation, submitting, onSubmit, onClose }: {
   const phraseRequired = Boolean(confirmation.diff.confirmation_phrase)
   const reasonRequired = rollback || confirmation.diff.danger !== 'normal'
   const ready = acknowledged && (!reasonRequired || reason.trim().length > 0) && (!phraseRequired || phrase === confirmation.diff.confirmation_phrase)
-  return <div className="modal-scrim"><section className="auth-modal config-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="config-confirm-title"><button type="button" className="modal-close icon-button" aria-label="关闭" onClick={onClose} disabled={submitting}><X size={18} /></button><h2 id="config-confirm-title">{rollback ? `回滚到 revision ${confirmation.target.revision}` : '应用配置草稿'}</h2><p>基于 revision {confirmation.diff.base_revision}，{confirmation.diff.changes.length} 项变化{confirmation.diff.restart_required ? '，需重启生效' : ''}。</p><DiffSummary diff={confirmation.diff} /><div className="confirmation-diff"><DiffChanges diff={confirmation.diff} /></div><label className="field"><span>原因{reasonRequired ? '（必填）' : ''}</span><input value={reason} maxLength={256} autoFocus onChange={(event) => setReason(event.target.value)} /></label>{phraseRequired && <><div className="confirmation-phrase"><span>确认短语</span><code>{confirmation.diff.confirmation_phrase}</code></div><label className="field"><span>PHRASE</span><input value={phrase} autoComplete="off" spellCheck={false} onChange={(event) => setPhrase(event.target.value)} /></label></>}<label className="check-field confirmation-check"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /> 确认执行</label><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose} disabled={submitting}>取消</button><button type="button" className="danger-button" onClick={() => onSubmit(reason.trim(), phrase)} disabled={!ready || submitting}>{submitting ? <RefreshCw size={16} className="spin" /> : rollback ? <Undo2 size={16} /> : <Check size={16} />} {rollback ? '确认回滚' : '确认 Apply'}</button></div></section></div>
+  return <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-backdrop overflow-y-auto">
+    <section className="w-full max-w-2xl rounded-xl border border-border bg-overlay text-overlay-foreground shadow-pop p-6" role="dialog" aria-modal="true" aria-label="确认配置操作">
+      <div className="flex items-center gap-2.5 mb-4">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-destructive text-destructive-foreground"><AlertTriangle size={16} /></div>
+        <div>
+          <div className="font-semibold">{rollback ? `回滚到 revision ${confirmation.target.revision}` : '应用配置草稿'}</div>
+          <div className="text-xs text-muted-foreground">基于 revision {confirmation.diff.base_revision}，{confirmation.diff.changes.length} 项变化{confirmation.diff.restart_required ? '，需重启生效' : ''}</div>
+        </div>
+        <button type="button" className="ml-auto text-muted-foreground hover:text-foreground" onClick={onClose} disabled={submitting} aria-label="关闭"><X size={16} /></button>
+      </div>
+      <DiffSummary diff={confirmation.diff} />
+      <div className="mt-3"><DiffChanges diff={confirmation.diff} /></div>
+      <label className="block mt-4 mb-3">
+        <span className="block mb-1.5 text-xs font-medium text-muted-foreground">原因{reasonRequired ? '（必填）' : ''}</span>
+        <input className="input" value={reason} maxLength={256} autoFocus onChange={(event) => setReason(event.target.value)} />
+      </label>
+      {phraseRequired && <>
+        <div className="flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive-soft px-3 py-2 mb-3 text-sm">
+          <span className="text-muted-foreground">确认短语</span>
+          <code className="font-mono text-destructive-foreground">{confirmation.diff.confirmation_phrase}</code>
+        </div>
+        <label className="block mb-3">
+          <span className="block mb-1.5 text-xs font-medium text-muted-foreground">输入短语</span>
+          <input className="input font-mono" value={phrase} autoComplete="off" spellCheck={false} onChange={(event) => setPhrase(event.target.value)} />
+        </label>
+      </>}
+      <label className="flex items-center gap-2 mb-5 text-sm cursor-pointer">
+        <input type="checkbox" className="accent-[var(--primary)]" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /> 确认执行
+      </label>
+      <div className="flex justify-end gap-2">
+        <button type="button" className="btn-outline" onClick={onClose} disabled={submitting}>取消</button>
+        <button type="button" className="btn-danger" onClick={() => onSubmit(reason.trim(), phrase)} disabled={!ready || submitting}>{submitting ? <RefreshCw size={15} className="animate-spin" /> : rollback ? <Undo2 size={15} /> : <Check size={15} />} {rollback ? '确认回滚' : '确认 Apply'}</button>
+      </div>
+    </section>
+  </div>
 }

@@ -1,0 +1,32 @@
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { @apply border-border; }
+  html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; font-size: 14px; }
+  body { @apply bg-background text-foreground font-sans leading-relaxed; }
+}
+
+@layer components {
+  .page { @apply max-w-6xl mx-auto px-6 py-8; }
+  .card { @apply bg-surface border border-border rounded-xl shadow-sm; }
+  .card-header { @apply px-6 py-4 border-b border-border; }
+  .card-title { @apply text-[15px] font-semibold tracking-tight; }
+  .card-desc { @apply text-[12.5px] text-muted-foreground mt-0.5; }
+  .card-body { @apply px-6 py-4; }
+  .table-wrap { @apply overflow-x-auto rounded-lg border border-border; }
+  .table { @apply w-full text-sm; }
+  .table th { @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-background-secondary border-b border-border; }
+  .table td { @apply px-4 py-3 border-b border-border; }
+  .table tr:last-child td { @apply border-b-0; }
+  .table tbody tr:hover td { @apply bg-accent; }
+  .input { @apply w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition placeholder:text-muted-foreground focus:border-primary; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition cursor-pointer bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed; }
+  .btn-outline { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition cursor-pointer border border-border bg-transparent hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed; }
+  .btn-danger { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition cursor-pointer bg-destructive text-destructive-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed; }
+  .badge { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+  .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden; clip: rect(0, 0, 0, 0) !important; white-space: nowrap; border: 0 !important; }
+}

@@ -1,0 +1,192 @@
+/* ============================================================
+   Portal UI design tokens — oklch，明/暗双主题。
+   结构对齐 Umina UI 令牌页（Base / Surface / Background levels /
+   Overlay / Status / Chart）。本文件是唯一视觉值来源：
+   应用经 index.css 引入；库产物经 dist-lib/portal-ui.css 引入。
+   ============================================================ */
+
+:root {
+  /* Base */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.216 0.006 265.14);
+  --muted: oklch(0.968 0.003 265.15);
+  --muted-foreground: oklch(0.553 0.009 265.1);
+  --border: oklch(0.928 0.004 265.1);
+  --separator: oklch(0.955 0.002 265.1);
+  --focus: oklch(0.62 0.19 262.4);
+  --ring: var(--focus);
+  --link: oklch(0.545 0.19 262.4);
+  --backdrop: oklch(0 0 0 / 0.5);
+
+  /* Background levels */
+  --background-secondary: oklch(0.986 0.002 265.1);
+  --background-tertiary: oklch(0.965 0.003 265.1);
+  --background-inverted: oklch(0.21 0.007 265.1);
+  --background-inverted-foreground: oklch(0.97 0.002 265.1);
+
+  /* Surface */
+  --surface: oklch(1 0 0);
+  --surface-foreground: var(--foreground);
+  --surface-hover: oklch(0.972 0.003 265.1);
+  --surface-secondary: oklch(0.986 0.002 265.1);
+  --surface-tertiary: oklch(0.955 0.003 265.1);
+
+  /* Overlay */
+  --overlay: oklch(1 0 0);
+  --overlay-foreground: var(--foreground);
+
+  /* Faint（三级文本 / 坐标轴） */
+  --faint: oklch(0.96 0.002 265.1);
+  --faint-foreground: oklch(0.665 0.007 265.1);
+
+  /* Accent（hover 底色） */
+  --accent: oklch(0.966 0.003 265.1);
+  --accent-foreground: var(--foreground);
+
+  /* Primary */
+  --primary: oklch(0.565 0.203 262.4);
+  --primary-foreground: oklch(0.99 0.002 262.4);
+  --primary-soft: oklch(0.952 0.026 262.4);
+  --secondary: var(--muted);
+  --secondary-foreground: var(--foreground);
+
+  /* Status */
+  --success: oklch(0.6 0.14 152.6);
+  --success-foreground: oklch(0.985 0.01 152.6);
+  --success-soft: oklch(0.962 0.05 152.6);
+  --warning: oklch(0.78 0.155 72.4);
+  --warning-foreground: oklch(0.52 0.13 66.5);
+  --warning-soft: oklch(0.965 0.05 78.6);
+  --destructive: oklch(0.585 0.218 27.3);
+  --destructive-foreground: oklch(0.985 0.005 27.3);
+  --destructive-soft: oklch(0.957 0.026 27.3);
+  --info: oklch(0.62 0.15 240.2);
+  --info-foreground: oklch(0.985 0.005 240.2);
+  --info-soft: oklch(0.96 0.028 240.2);
+
+  /* Chart — 蓝色梯度（深→浅用于地域分布，浅→深用于热力图） */
+  --chart-c1: oklch(0.965 0.018 262.4);
+  --chart-c2: oklch(0.93 0.042 262.4);
+  --chart-c3: oklch(0.885 0.072 262.4);
+  --chart-c4: oklch(0.82 0.108 262.4);
+  --chart-c5: oklch(0.735 0.145 262.4);
+  --chart-c6: oklch(0.655 0.175 262.4);
+  --chart-c7: oklch(0.565 0.203 262.4);
+  --chart-c8: oklch(0.475 0.172 264.5);
+  --chart-c9: oklch(0.395 0.125 265.5);
+  --chart-net-in: oklch(0.78 0.1 262.4);
+  --chart-net-out: oklch(0.565 0.203 262.4);
+
+  /* Code（代码面：双主题恒深，独立于 inverted 语义） */
+  --code-bg: oklch(0.185 0.008 265.1);
+  --code-border: oklch(0.28 0.008 265.1);
+  --code-text: oklch(0.9 0.005 265.1);
+  --code-text-dim: oklch(0.72 0.008 265.1);
+
+  --radius: 0.625rem;
+}
+
+.dark,
+.theme-dark {
+  --background: oklch(0.13 0.004 265.1);
+  --foreground: oklch(0.955 0.002 265.1);
+  --muted: oklch(0.205 0.006 265.1);
+  --muted-foreground: oklch(0.72 0.008 265.1);
+  --border: oklch(0.265 0.007 265.1);
+  --separator: oklch(0.225 0.006 265.1);
+  --focus: oklch(0.68 0.17 262.4);
+  --link: oklch(0.72 0.155 262.4);
+  --backdrop: oklch(0 0 0 / 0.65);
+
+  --background-secondary: oklch(0.155 0.005 265.1);
+  --background-tertiary: oklch(0.2 0.006 265.1);
+  --background-inverted: oklch(0.96 0.002 265.1);
+  --background-inverted-foreground: oklch(0.16 0.005 265.1);
+
+  --surface: oklch(0.168 0.006 265.1);
+  --surface-foreground: var(--foreground);
+  --surface-hover: oklch(0.225 0.007 265.1);
+  --surface-secondary: oklch(0.19 0.006 265.1);
+  --surface-tertiary: oklch(0.245 0.007 265.1);
+
+  --overlay: oklch(0.19 0.006 265.1);
+  --overlay-foreground: var(--foreground);
+
+  --faint: oklch(0.2 0.006 265.1);
+  --faint-foreground: oklch(0.585 0.008 265.1);
+
+  --accent: oklch(0.235 0.007 265.1);
+  --accent-foreground: var(--foreground);
+
+  --primary: oklch(0.66 0.17 262.4);
+  --primary-foreground: oklch(0.14 0.02 262.4);
+  --primary-soft: oklch(0.26 0.065 262.4);
+  --secondary: var(--muted);
+  --secondary-foreground: var(--foreground);
+
+  --success: oklch(0.68 0.14 152.6);
+  --success-foreground: oklch(0.14 0.02 152.6);
+  --success-soft: oklch(0.28 0.06 152.6);
+  --warning: oklch(0.8 0.14 72.4);
+  --warning-foreground: oklch(0.9 0.05 80);
+  --warning-soft: oklch(0.28 0.06 70);
+  --destructive: oklch(0.66 0.19 27.3);
+  --destructive-foreground: oklch(0.14 0.02 27.3);
+  --destructive-soft: oklch(0.28 0.07 27.3);
+  --info: oklch(0.7 0.13 240.2);
+  --info-foreground: oklch(0.14 0.02 240.2);
+  --info-soft: oklch(0.28 0.05 240.2);
+
+  --chart-c1: oklch(0.3 0.05 264);
+  --chart-c2: oklch(0.37 0.08 263.5);
+  --chart-c3: oklch(0.44 0.11 263);
+  --chart-c4: oklch(0.51 0.14 262.8);
+  --chart-c5: oklch(0.58 0.16 262.6);
+  --chart-c6: oklch(0.65 0.17 262.4);
+  --chart-c7: oklch(0.72 0.15 262.4);
+  --chart-c8: oklch(0.79 0.12 262.4);
+  --chart-c9: oklch(0.86 0.09 262.4);
+  --chart-net-in: oklch(0.6 0.13 262.4);
+  --chart-net-out: oklch(0.72 0.15 262.4);
+
+  /* Code（暗色下与亮色几乎一致，仅略提亮以贴合整体层级） */
+  --code-bg: oklch(0.165 0.008 265.1);
+  --code-border: oklch(0.25 0.008 265.1);
+  --code-text: oklch(0.9 0.005 265.1);
+  --code-text-dim: oklch(0.7 0.008 265.1);
+}
+
+/* 数字排版：统计值/坐标使用等宽数字 */
+.tnum {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Reduce motion（showcase 顶栏开关 / 系统偏好） */
+[data-reduce-motion="true"] *,
+[data-reduce-motion="true"] *::before,
+[data-reduce-motion="true"] *::after {
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* 卡片排版（Card/CardHead 使用；纯 CSS，便于库产物独立生效） */
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.card-subtitle {
+  font-size: 12.5px;
+  color: var(--muted-foreground);
+}
