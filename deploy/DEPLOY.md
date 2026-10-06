@@ -99,8 +99,6 @@ umask 077
 openssl rand -hex 32 > deploy/docker/secrets/admin.token
 ```
 
-`deploy/docker/secrets/*` 已被 Git 忽略。
-
 #### 2. 检查测试配置
 
 测试配置位于 `deploy/docker/config.test.yaml`：
@@ -292,7 +290,7 @@ A: 查后端日志，按 `request_id` 过滤。常见原因：
 
 ### Q: 前端生成的 token 后端不认？
 
-A: 通常是签发方和后端 `config.yaml` 的 `salt` / `difficulty` 不一致。对比两边的值。
+A: 99% 是 `config.json` 和后端 `config.yaml` 的 `salt` / `difficulty` 不一致。对比两边的值。
 
 ### Q: generic 链接用了一次就 used_up？
 
