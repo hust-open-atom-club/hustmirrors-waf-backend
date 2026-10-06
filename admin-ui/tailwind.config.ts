@@ -9,7 +9,6 @@ export default {
       colors: {
         border: "var(--border)",
         separator: "var(--separator)",
-        input: "var(--input)",
         ring: "var(--ring)",
         focus: "var(--focus)",
         backdrop: "var(--backdrop)",

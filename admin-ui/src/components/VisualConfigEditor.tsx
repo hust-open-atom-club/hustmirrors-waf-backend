@@ -14,20 +14,15 @@ export default function VisualConfigEditor({ yamlText, onChange, disabled }: {
   onChange: (nextYaml: string) => void
   disabled: boolean
 }) {
-  const [parseError, setParseError] = useState('')
   const [showYaml, setShowYaml] = useState(false)
 
-  const doc = useMemo(() => {
-    if (!yamlText.trim()) return {} as Obj
+  const { doc, parseError } = useMemo(() => {
+    if (!yamlText.trim()) return { doc: {} as Obj, parseError: '' }
     try {
-      const parsed = loadYaml(yamlText)
-      setParseError('')
-      return (parsed ?? {}) as Obj
+      return { doc: (loadYaml(yamlText) ?? {}) as Obj, parseError: '' }
     } catch (reason) {
-      setParseError(reason instanceof Error ? reason.message : 'YAML 解析失败')
-      return {} as Obj
+      return { doc: {} as Obj, parseError: reason instanceof Error ? reason.message : 'YAML 解析失败' }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yamlText])
 
   const update = (mutate: (root: Obj) => void) => {
@@ -91,8 +86,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Toggle({ label, path, doc, disabled, setPath }: { label: string; path: string[]; doc: Obj; disabled: boolean; setPath: (path: string[], value: unknown) => void }) {
   const value = get(doc, path) === true
   return <label className={`flex items-center gap-2.5 min-h-9 ${disabled ? 'opacity-55 cursor-not-allowed' : 'cursor-pointer'}`}>
-    <input type="checkbox" className="sr-only" checked={value} disabled={disabled} onChange={(event) => setPath(path, event.target.checked)} />
-    <span className={`w-8 h-[18px] rounded-full transition relative flex-none ${value ? 'bg-primary' : 'bg-muted-foreground/30'}`}>
+    <input type="checkbox" className="peer sr-only" checked={value} disabled={disabled} onChange={(event) => setPath(path, event.target.checked)} />
+    <span className={`w-8 h-[18px] rounded-full transition relative flex-none ring-primary ring-offset-2 ring-offset-surface-secondary peer-focus-visible:ring-2 ${value ? 'bg-primary' : 'bg-muted-foreground/30'}`}>
       <span className={`absolute top-[3px] h-3 w-3 rounded-full bg-white transition-all ${value ? 'left-[17px]' : 'left-[3px]'}`} />
     </span>
     <span className="text-sm">{label}</span>
