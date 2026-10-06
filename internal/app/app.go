@@ -71,7 +71,7 @@ func build(ctx context.Context, cfg *config.Config, loaded *config.Loaded) (*App
 	if err != nil {
 		return nil, fmt.Errorf("app: init logging: %w", err)
 	}
-	logger.Info(ctx, "starting mirrors-waf-backend",
+	logger.Info(ctx, "starting garmr",
 		logging.String("version", version.Get().Version),
 		logging.String("commit", version.Get().Commit),
 	)

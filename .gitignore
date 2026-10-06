@@ -48,3 +48,6 @@ bin/
 
 # Embedded admin UI build output (rebuilt via make build)
 internal/adminui/dist/
+
+# Tooling
+.narrafork/
