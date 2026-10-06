@@ -1,4 +1,6 @@
-# mirrors-waf-backend
+# Garmr
+
+<img src="docs/garmr.svg" width="96" alt="Garmr" align="right" />
 
 > 镜像站大文件防盗刷：无 token 限速下载，算一次 PoW 换全速。
 > Nginx `auth_request` 下游鉴权服务，token 携带在 URL 中——wget/curl 直接可用，无 Cookie/Session。
@@ -6,6 +8,14 @@
 [![Go](https://img.shields.io/badge/Go-1.24+-00ADD8)](https://go.dev/)
 [![Echo](https://img.shields.io/badge/Echo-v4-00ADD8)](https://echo.labstack.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+## 名字由来
+
+Garmr（加尔姆）是北欧神话中看守 Hel 之门的血胸巨犬——神话里守冥界入口，
+这里守镜像站的大文件：未验证的请求限速放行，通过 PoW 的全速通过。
+
+命名致敬 [cerberus](https://github.com/sjtug/cerberus)：同为看门之犬，
+希腊的叫 Cerberus，北欧的叫 Garmr。
 
 ## 工作原理
 
@@ -15,7 +25,7 @@
 graph TD
     Browser["用户浏览器 / wget / curl"]
     Nginx["Nginx<br/>auth_request 鉴权"]
-    Backend["mirrors-waf-backend<br/>/verify_pow"]
+    Backend["Garmr<br/>/verify_pow"]
     Storage[("PostgreSQL / Redis / 内存<br/>使用次数 + 风控计数")]
     FS["文件服务<br/>ISO / 大文件"]
 
@@ -34,7 +44,7 @@ sequenceDiagram
     actor User as 用户
     participant FE as 前端 PoW 页面
     participant Nginx as Nginx
-    participant Auth as mirrors-waf-backend
+    participant Auth as Garmr
     participant Store as PostgreSQL / Redis
     participant FS as 文件服务
 

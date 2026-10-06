@@ -2,10 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   Activity, BarChart3, ChevronRight, CircleHelp, FileSearch,
-  LayoutDashboard, LockKeyhole, Menu, RefreshCw, Settings2, ShieldCheck, X,
+  LayoutDashboard, LockKeyhole, Menu, RefreshCw, Settings2, X,
 } from 'lucide-react'
 import { AuthRequiredError, rpc } from './api'
 import ConfigManagement from './components/ConfigManagement'
+import { Logo } from './components/Logo'
 import type {
   AuditList, AuthState, DashboardSeries, DashboardSummary,
   SystemHealth, SystemInfo,
@@ -207,11 +208,11 @@ function App() {
       <aside className={`fixed inset-y-0 left-0 z-30 w-52 flex flex-col bg-surface border-r border-border transition-transform lg:translate-x-0 ${mobileNav ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center gap-2.5 px-4 h-14 border-b border-border">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <ShieldCheck size={17} />
+            <Logo size={20} />
           </div>
           <div className="min-w-0">
-            <div className="text-sm font-semibold leading-tight">Mirrors WAF</div>
-            <div className="text-[11px] text-muted-foreground">管理控制台</div>
+            <div className="text-sm font-semibold leading-tight">Garmr</div>
+            <div className="text-[11px] text-muted-foreground">镜像站防刷网关</div>
           </div>
           <button className="ml-auto lg:hidden text-muted-foreground hover:text-foreground" onClick={() => setMobileNav(false)} aria-label="关闭导航"><X size={16} /></button>
         </div>
@@ -503,7 +504,7 @@ function AuthModal({ authForm, setAuthForm, onSubmit, onClose }: { authForm: { t
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground"><LockKeyhole size={16} /></div>
         <div>
           <div className="font-semibold">登录</div>
-          <div className="text-xs text-muted-foreground">Mirrors WAF Admin</div>
+          <div className="text-xs text-muted-foreground">Garmr Admin</div>
         </div>
         <button className="ml-auto text-muted-foreground hover:text-foreground" onClick={onClose} aria-label="关闭"><X size={16} /></button>
       </div>
