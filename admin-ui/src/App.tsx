@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   Activity, BarChart3, ChevronRight, CircleHelp, FileSearch,
-  LayoutDashboard, LockKeyhole, Menu, RefreshCw, Settings2, X,
+  LayoutDashboard, LockKeyhole, Menu, Moon, RefreshCw, Settings2, Sun, X,
 } from 'lucide-react'
 import { AuthRequiredError, rpc } from './api'
 import ConfigManagement from './components/ConfigManagement'
@@ -52,6 +52,14 @@ function App() {
     return navItems.some((item) => item.id === value) ? value : 'overview'
   })
   const [mobileNav, setMobileNav] = useState(false)
+  const [dark, setDark] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem('garmr.theme')
+      if (saved === 'dark') return true
+      if (saved === 'light') return false
+    } catch { /* storage unavailable */ }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
   const [auth, setAuth] = useState<AuthState>(initialAuth)
   const [authForm, setAuthForm] = useState({ token: '', remember: true })
   const [authRequired, setAuthRequired] = useState(false)
@@ -135,6 +143,12 @@ function App() {
   useEffect(() => {
     window.location.hash = `/${page}`
   }, [page])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark)
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#1a1d22' : '#f4f5f7')
+    try { window.localStorage.setItem('garmr.theme', dark ? 'dark' : 'light') } catch { /* ignore */ }
+  }, [dark])
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -247,6 +261,9 @@ function App() {
               <span className={`h-1.5 w-1.5 rounded-full ${error ? 'bg-warning' : 'bg-success'}`} />
               <span className="hidden sm:inline">{error ? '连接异常' : '服务正常'}</span>
             </span>
+            <button className="btn-outline !px-2.5" onClick={() => setDark((value) => !value)} aria-label="切换主题">
+              {dark ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
             <button className="btn-outline !px-2.5" onClick={() => void refresh()} disabled={refreshing} aria-label="刷新数据">
               <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
             </button>
