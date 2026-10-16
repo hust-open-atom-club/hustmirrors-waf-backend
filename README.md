@@ -1,147 +1,164 @@
 # Garmr
 
+**English** | [简体中文](README.zh-CN.md)
+
 <img src="docs/garmr.svg" width="96" alt="Garmr" align="right" />
 
-> 镜像站大文件防盗刷：无 token 限速下载，算一次 PoW 换全速。
-> Nginx `auth_request` 下游鉴权服务，token 携带在 URL 中——wget/curl 直接可用，无 Cookie/Session。
+> Anti-abuse gateway for large mirror downloads: unverified requests get
+> rate-limited, one PoW buys full speed.
+> Runs as an Nginx `auth_request` backend; the token travels in the URL, so
+> wget and curl work out of the box — no cookies, no sessions.
 
 [![Go](https://img.shields.io/badge/Go-1.24+-00ADD8)](https://go.dev/)
 [![Echo](https://img.shields.io/badge/Echo-v4-00ADD8)](https://echo.labstack.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-## 名字由来
+## The name
 
-Garmr（加尔姆）是北欧神话中看守 Hel 之门的血胸巨犬——神话里守冥界入口，
-这里守镜像站的大文件：未验证的请求限速放行，通过 PoW 的全速通过。
+Garmr is the blood-stained hound that guards the gate of Hel in Norse
+mythology. A gatekeeper in myth, a gatekeeper here: unverified requests
+pass slowly, PoW-verified downloads pass at full speed.
 
-命名致敬 [cerberus](https://github.com/sjtug/cerberus)：同为看门之犬，
-希腊的叫 Cerberus，北欧的叫 Garmr。
+The name nods to [cerberus](https://github.com/sjtug/cerberus) — both are
+watchdogs at the gate; the Greek one is Cerberus, the Norse one is Garmr.
 
-## 工作原理
+## How it works
 
-### 架构总览
+### Architecture
 
 ```mermaid
 graph TD
-    Browser["用户浏览器 / wget / curl"]
-    Nginx["Nginx<br/>auth_request 鉴权"]
+    Browser["Browser / wget / curl"]
+    Nginx["Nginx<br/>auth_request"]
     Backend["Garmr<br/>/verify_pow"]
-    Storage[("PostgreSQL / Redis / 内存<br/>使用次数 + 风控计数")]
-    FS["文件服务<br/>ISO / 大文件"]
+    Storage[("PostgreSQL / Redis / memory<br/>usage counts + risk counters")]
+    FS["File service<br/>ISO / large files"]
 
-    Browser -->|"GET /ubuntu.iso<br/>?token=... 和 sign=..."| Nginx
-    Nginx -->|"内部子请求<br/>X-Original-URI, X-Original-Args,<br/>X-Real-IP"| Backend
-    Backend -->|"读写使用次数<br/>（generic 模式）"| Storage
-    Backend -->|"200 + X-Pow-Limit-Rate<br/>或 403 / 429"| Nginx
-    Nginx -->|"全速或限速转发"| FS
-    FS -->|"文件数据流"| Browser
+    Browser -->|"GET /ubuntu.iso<br/>?token=... &sign=..."| Nginx
+    Nginx -->|"internal subrequest<br/>X-Original-URI, X-Original-Args,<br/>X-Real-IP"| Backend
+    Backend -->|"usage read/write<br/>(generic mode)"| Storage
+    Backend -->|"200 + X-Pow-Limit-Rate<br/>or 403 / 429"| Nginx
+    Nginx -->|"full speed or rate-limited"| FS
+    FS -->|"file stream"| Browser
 ```
 
-### 验证流程
+### Verification flow
 
 ```mermaid
 sequenceDiagram
-    actor User as 用户
-    participant FE as 前端 PoW 页面
+    actor User
+    participant FE as PoW page
     participant Nginx as Nginx
     participant Auth as Garmr
     participant Store as PostgreSQL / Redis
-    participant FS as 文件服务
+    participant FS as File service
 
-    User->>FE: 输入文件路径，选择模式
-    Note over FE: 构造 token（path/mode/exp/difficulty/salt）<br/>枚举 cnt 计算 SHA-256(canonical)<br/>直到哈希前 d bit 全为 0
+    User->>FE: pick path + mode
+    Note over FE: build token (path/mode/exp/difficulty/salt)<br/>enumerate cnt over SHA-256(canonical)<br/>until the hash has d leading zero bits
 
-    loop PoW 计算（Web Worker）
+    loop PoW search (Web Worker)
         FE->>FE: sha256(canonical + cnt)
     end
 
-    FE-->>User: 生成 URL<br/>?token=base64(payload) 和 sign=hex(hash)
+    FE-->>User: URL with<br/>?token=base64(payload) &sign=hex(hash)
 
-    User->>Nginx: GET /ubuntu.iso?token=... 和 sign=...
+    User->>Nginx: GET /ubuntu.iso?token=... &sign=...
     Nginx->>Auth: auth_request /verify_pow<br/>X-Original-URI, X-Original-Args, X-Real-IP
 
-    Auth->>Auth: 1. 路径归一化后判断是否受保护
-    Auth->>Auth: 2. 解析 token，校验字段<br/>（version/mode/algorithm/path格式/salt）
-    Auth->>Auth: 3. token.path == 请求路径？
-    Auth->>Auth: 4. 未过期？TTL 合法？
-    Auth->>Auth: 5. 重算 SHA-256 == sign？
-    Auth->>Auth: 6. 哈希满足前导零难度？
+    Auth->>Auth: 1. normalize path, protected?
+    Auth->>Auth: 2. parse token, check fields<br/>(version/mode/algorithm/path/salt)
+    Auth->>Auth: 3. token.path == request path?
+    Auth->>Auth: 4. not expired? TTL within limits?
+    Auth->>Auth: 5. recomputed SHA-256 == sign?
+    Auth->>Auth: 6. hash meets leading-zero difficulty?
 
-    alt mode = generic（通用链接）
-        Auth->>Store: 原子递增使用次数
-        Store-->>Auth: 返回当前 uses
-        Auth->>Auth: 7. uses <= max_uses？
-    else mode = ip_bound（绑定 IP）
-        Auth->>Auth: 7. token.ip == 请求 IP？
+    alt mode = generic
+        Auth->>Store: atomic increment of uses
+        Store-->>Auth: current uses
+        Auth->>Auth: 7. uses <= max_uses?
+    else mode = ip_bound
+        Auth->>Auth: 7. token.ip == request IP?
     end
 
-    alt 全部通过
+    alt all checks pass
         Auth-->>Nginx: 200 + X-Pow-Decision: verified<br/>X-Pow-Limit-Rate: 0
-        Nginx->>FS: 全速转发
-        FS-->>User: 文件数据流
-    else 无 token 但低风险
+        Nginx->>FS: forward at full speed
+        FS-->>User: file stream
+    else no token, low risk
         Auth-->>Nginx: 200 + X-Pow-Decision: unverified_slow<br/>X-Pow-Limit-Rate: 512k
-        Nginx->>FS: 限速转发
-        FS-->>User: 限速文件数据流
-    else 校验失败
+        Nginx->>FS: forward rate-limited
+        FS-->>User: rate-limited stream
+    else verification failed
         Auth-->>Nginx: 403 + X-Pow-Error
-        Nginx-->>User: 返回错误页
+        Nginx-->>User: error page
     end
 ```
 
-- **无 token**：大文件限速放行（默认 512k/s），小文件和包管理器元数据全速
-- **有合法 token**：PoW 验证通过后全速下载
-- **非法 token**：直接 403
+- **No token**: large files are rate-limited (512k/s by default); small files
+  and package-manager metadata pass at full speed
+- **Valid token**: full-speed download after PoW verification
+- **Invalid token**: 403
 
-PoW 结果携带在 URL 参数中（`?token=...` 和 `sign=...`），不依赖 Cookie/Session，wget/curl 直接可用。
+The proof travels in URL parameters (`?token=...` and `sign=...`); nothing
+depends on cookies or sessions, so wget/curl work as-is.
 
-### 风控规则链
+### Risk-control rule chains
 
-`risk_control.enabled=true` 时，请求先过一条 iptables 风格的规则链，再决定是否走PoW 校验。链的入口是 `INPUT`，支持 `ACCEPT` / `REJECT` / `RATE_LIMIT`/`TOO_MANY` / `REQUIRE_POW` / `JUMP` / `LOG` / `MARK`。
+With `risk_control.enabled=true`, every request first traverses an
+iptables-style rule chain before PoW verification is considered. The entry
+chain is `INPUT`; supported targets are `ACCEPT` / `REJECT` / `RATE_LIMIT` /
+`TOO_MANY` / `REQUIRE_POW` / `JUMP` / `LOG` / `MARK`.
 
-规则匹配 `pow_status` 时，取值含义：
+`pow_status` values seen by rules:
 
-| 值 | 含义 |
+| Value | Meaning |
 |---|---|
-| `missing` | 没带 token |
-| `valid` | token 合法且已通过全部校验 |
-| `invalid` | 签名不符、难度不够、path 不匹配、TTL 超过 `max_ttl_seconds` 等 |
-| `expired` | 已过期 |
-| `mode_disabled` | token 本身合法，但对应模式已被 `enabled: false` 关闭 |
-| `unverifiable` | token 本身合法，但**无法校验**——目前仅指 `ip_bound` token 遇到 `X-Real-IP` 缺失 |
+| `missing` | no token provided |
+| `valid` | token is well-formed and passed every check |
+| `invalid` | bad signature, difficulty not met, path mismatch, TTL over `max_ttl_seconds`, ... |
+| `expired` | past its expiry |
+| `mode_disabled` | token itself is fine, but its mode is switched off with `enabled: false` |
+| `unverifiable` | token itself is fine, but **cannot be checked** — today that means an `ip_bound` token with `X-Real-IP` missing |
 
-后三类不是伪造，但也**不能当作通过**，规则里必须显式拒绝（示例配置已包含）。
+The last three are not forgeries, but they **must not be treated as passes**;
+rules have to reject them explicitly (the example config does).
 
-> `pow_status` 与 PoW-only 路径共用同一套校验函数：PoW-only 会拒绝的 token，风控路径也不会判为 `valid`。
+> `pow_status` shares its verification code with the PoW-only path: a token
+> the PoW-only path would reject never classifies as `valid` here either.
 
-被风控拒绝的响应会带 `X-Pow-Trace`，格式为 `链:规则` 以 `,` 连接，`>` 表示 JUMP：
+Denied-by-risk responses carry `X-Pow-Trace`, a comma-separated list of
+`chain:rule` with `>` marking a JUMP:
 
 ```
 X-Pow-Trace: INPUT:missing-pow>RISK_CHECK,RISK_CHECK:too-many-1h
 ```
 
-只记录命中规则，超长截断。完整 trace（含未命中项）用管理 API 的 `rule.preview`。
+Only matched rules are listed; long traces are truncated. The full trace
+(including non-matches) comes from `garmr rule preview`.
 
-> `generic` 模式的 `max_uses` 在所有放行路径（`ACCEPT` / `RATE_LIMIT` / `REQUIRE_POW`）上都扣减。
+> `generic` mode's `max_uses` is charged on every allow path
+> (`ACCEPT` / `RATE_LIMIT` / `REQUIRE_POW`).
 >
-> `risk_control.pending` 限制同一 IP 并发的受保护鉴权请求数，超过 `max_per_ip` 返回 429 并阻断 `block_ttl`。状态仅在单进程内，多副本不共享。
+> `risk_control.pending` caps concurrent protected auth requests per IP;
+> exceeding `max_per_ip` returns 429 and blocks the IP for `block_ttl`.
+> The state is per-process; replicas do not share it.
 
-## 快速开始
+## Quick start
 
-### 构建
+### Build
 
 ```bash
 make build
-# 产物：bin/server
+# binary: bin/server
 ```
 
-### 启动（开发模式）
+### Run (development)
 
 ```bash
 ./bin/server --config configs/config.example.yaml
 ```
 
-### 健康检查
+### Health checks
 
 ```bash
 curl http://127.0.0.1:8080/healthz
@@ -151,16 +168,16 @@ curl http://127.0.0.1:8080/readyz
 # {"status":"ok","storage":"ok"}
 ```
 
-### 验证鉴权
+### Try verification
 
 ```bash
-# 非保护路径：200
+# unprotected path: 200
 curl -i http://127.0.0.1:8080/verify_pow \
   -H "X-Original-URI: /index.html" \
   -H "X-Real-IP: 1.2.3.4"
 # X-Pow-Reason: not_protected
 
-# 保护路径无 token：限速放行
+# protected path, no token: rate-limited
 curl -i http://127.0.0.1:8080/verify_pow \
   -H "X-Original-URI: /ubuntu.iso" \
   -H "X-Real-IP: 1.2.3.4"
@@ -168,7 +185,7 @@ curl -i http://127.0.0.1:8080/verify_pow \
 # X-Pow-Decision: unverified_slow
 # X-Pow-Limit-Rate: 512k
 
-# 非法 token：403
+# invalid token: 403
 curl -i http://127.0.0.1:8080/verify_pow \
   -H "X-Original-URI: /ubuntu.iso" \
   -H "X-Original-Args: token=invalid&sign=0000...0000" \
@@ -176,11 +193,13 @@ curl -i http://127.0.0.1:8080/verify_pow \
 # X-Pow-Error: malformed_token
 ```
 
-`config.dev.yaml` 关闭风控（`risk_control.enabled=false`），无 token 的保护路径直接 403 而非限速。
+`config.dev.yaml` disables risk control (`risk_control.enabled=false`): a
+protected path without a token is denied outright instead of rate-limited.
 
-## Nginx 接入
+## Nginx integration
 
-完整配置见 [`deploy/nginx/mirrors-waf.conf`](deploy/nginx/mirrors-waf.conf)，核心部分：
+Full example in [`deploy/nginx/mirrors-waf.conf`](deploy/nginx/mirrors-waf.conf);
+the core parts:
 
 ```nginx
 location ~* \.(iso|img|qcow2|zip|7z|tar|tar\.gz|tar\.xz)$ {
@@ -202,28 +221,31 @@ location = /_pow_auth {
 }
 ```
 
-## 管理 CLI（garmr）
+## Management CLI (garmr)
 
-配置管理与规则检查通过本地 CLI 完成，服务无需运行：
+Configuration and rule inspection are handled by a local CLI; the service
+does not need to be running:
 
 ```bash
-garmr -config /etc/mirrors-waf/config.yaml config show        # 查看配置（敏感值脱敏）
-garmr config edit                                             # $EDITOR 编辑 → 校验 → diff → 确认 → 写入
-garmr config validate candidate.yaml                          # 校验候选文件
-garmr config diff candidate.yaml                              # 对比当前配置
-garmr config history                                          # 修订历史
-garmr config rollback 3                                       # 回滚到 revision 3
-garmr rule list                                               # 风控规则链
-garmr rule preview -path /ubuntu.iso -pow missing             # 模拟请求走链
+garmr -config /etc/mirrors-waf/config.yaml config show   # view config (secrets redacted)
+garmr config edit                                        # $EDITOR -> validate -> diff -> confirm -> write
+garmr config validate candidate.yaml                     # validate a candidate file
+garmr config diff candidate.yaml                         # diff against the active config
+garmr config history                                     # revision log
+garmr config rollback 3                                  # restore revision 3
+garmr rule list                                          # risk chains and rules
+garmr rule preview -path /ubuntu.iso -pow missing        # evaluate a hypothetical request
 ```
 
-`config edit` 的流程：保存退出后自动做结构校验（失败回到编辑器）→ 敏感值占位符合并 →
-危险分级 diff（`normal` / `dangerous` / `critical`）→ 危险变更要求输入确认短语与原因 →
-原子写盘并落历史。生效需重启服务。
+`config edit` flow: on save it validates the structure (on failure you drop
+back into the editor) → merges secret placeholders → shows a
+danger-classified diff (`normal` / `dangerous` / `critical`) → dangerous
+changes require the confirmation phrase and a reason → atomically writes the
+file and records history. A restart applies the change.
 
-## 生成 PoW 下载链接
+## Minting PoW download links
 
-后端只验证，不签发。示例脚本：
+The backend only verifies; it never issues tokens. Example script:
 
 ```python
 import base64, hashlib, json, time
@@ -251,38 +273,45 @@ token = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("
 print(f"https://mirrors.example.edu/ubuntu.iso?token={token}&sign={sign}")
 ```
 
-## 配置
+## Configuration
 
-完整字段见 [`configs/config.example.yaml`](configs/config.example.yaml)。
+Full field reference in [`configs/config.example.yaml`](configs/config.example.yaml).
 
-| 字段 | 默认值 | 说明 |
+| Field | Default | Description |
 |---|---|---|
-| `server.listen` | `127.0.0.1:8080` | 监听地址 |
-| `pow.enabled` | `true` | PoW 验证总开关。`false` 时不解析也不校验 token，交由风控链决定 |
-| `pow.dry_run` | `false` | dry-run：记录但放行 |
-| `pow.bypass_all` | `false` | 紧急绕过 PoW/普通风控；不会绕过 Admin 人工 IP Block |
-| `pow.algorithm` | `sha256` | 仅实现 `sha256`，填其他值启动即报错 |
-| `pow.modes.ip_bound` | enabled, d=22, ttl=24h | 绑定 IP 长效模式，不计量 |
-| `pow.modes.generic` | enabled, d=22, ttl=30m, max_uses=5 | 通用短效模式，按 `max_uses` 计量 |
+| `server.listen` | `127.0.0.1:8080` | listen address |
+| `pow.enabled` | `true` | master PoW switch; `false` skips token parsing and verification entirely, leaving decisions to the risk chains |
+| `pow.dry_run` | `false` | record but allow |
+| `pow.bypass_all` | `false` | emergency bypass of PoW and the normal risk chains |
+| `pow.algorithm` | `sha256` | only `sha256` is implemented; anything else fails at startup |
+| `pow.modes.ip_bound` | enabled, d=22, ttl=24h | IP-bound long-lived mode, unmetered |
+| `pow.modes.generic` | enabled, d=22, ttl=30m, max_uses=5 | short-lived mode metered by `max_uses` |
 | `storage.driver` | `memory` | `memory` / `postgres` / `redis` |
 | `storage.counter_driver` | `memory` | `memory` / `redis` |
-| `risk_control.enabled` | `true` | 风控规则链 |
-| `risk_control.pending.enabled` | `true` | 是否启用同一 IP 的受保护请求并发限制与临时 block |
-| `risk_control.pending.max_per_ip` | `128` | 同一 IP 同时执行的受保护鉴权请求上限 |
-| `risk_control.pending.block_ttl` | `1h` | 超过 pending 上限后的 IP 临时 block 时长 |
-| `cleanup.enabled` | `true` | 过期记录回收 |
-| `logging.log_access` | `true` | 是否记录放行结果的日志 |
-| `logging.log_denied` | `true` | 是否记录拒绝结果的日志 |
+| `risk_control.enabled` | `true` | risk rule chains |
+| `risk_control.pending.enabled` | `true` | per-IP concurrency limit with temporary blocks |
+| `risk_control.pending.max_per_ip` | `128` | concurrent protected auth requests per IP |
+| `risk_control.pending.block_ttl` | `1h` | block duration once the pending limit is exceeded |
+| `cleanup.enabled` | `true` | expired-record collection |
+| `logging.log_access` | `true` | log allow decisions |
+| `logging.log_denied` | `true` | log deny decisions |
 
-> `pow.enabled=false` 只跳过 PoW 校验，风控规则照常生效；`bypass_all=true` 则连 PoW 带普通风控一起绕过。
+> `pow.enabled=false` only skips PoW verification; risk rules still run.
+> `bypass_all=true` skips PoW and the normal risk chains.
 
-> 配置管理由 `garmr` CLI 在本地完成（见下节），历史保存在配置文件同目录 `.mirrors-waf-history/`。Apply/rollback 只写配置文件，需重启生效；敏感值显示为 `${SECRET:KEEP}` 占位符。
+> Configuration management runs locally through the `garmr` CLI (above);
+> history lives next to the config file in `.mirrors-waf-history/`.
+> Apply/rollback only write the file and need a restart; secrets appear as
+> `${SECRET:KEEP}` placeholders.
 
-> `logging.log_*` 只影响日志不影响指标；5xx 始终记录。
+> `logging.log_*` affects logs only, never metrics; 5xx is always logged.
 
-> 以下字段会被校验拒绝而非静默忽略：`pow.modes.*.count_usage`（用 `max_uses`）、`risk_control.chains.*.rules[].match.risk_score_gte`（无风险分组件）。
+> These fields are rejected at startup rather than silently ignored:
+> `pow.modes.*.count_usage` (use `max_uses`),
+> `risk_control.chains.*.rules[].match.risk_score_gte` (no component produces
+> a risk score).
 
-环境变量覆盖（前缀 `MIRRORS_WAF_`，分隔符 `__`）：
+Environment overrides (prefix `MIRRORS_WAF_`, separator `__`):
 
 ```bash
 MIRRORS_WAF_SERVER__LISTEN=127.0.0.1:8080
@@ -290,33 +319,33 @@ MIRRORS_WAF_POW__DRY_RUN=true
 MIRRORS_WAF_STORAGE__DRIVER=postgres
 ```
 
-## 项目结构
+## Layout
 
 ```
-├── cmd/server/               # 服务入口
-├── cmd/garmr/                # 本地管理 CLI
+├── cmd/server/               # service entry point
+├── cmd/garmr/                # local management CLI
 ├── internal/
-│   ├── app/                  # 装配与启动
-│   ├── auth/                 # PoW 验证编排
+│   ├── app/                  # assembly and startup
+│   ├── auth/                 # PoW verification orchestration
 │   ├── pow/                  # token / canonical / sign / difficulty
-│   ├── matcher/             # 路径归一化 + 保护规则
-│   ├── storage/             # usage: memory/postgres/redis，counter: memory/redis
-│   ├── risk/                # iptables 风格规则链
-│   ├── transport/echo/      # HTTP 层
-│   ├── configctl/            # CLI 配置管理编排（diff/danger/secret 合并）
-│   ├── config/              # 配置 + 校验
-│   ├── configstore/         # 历史目录、原子写盘和回滚
-│   ├── logging/             # zap 包装
+│   ├── matcher/             # path normalization + protection rules
+│   ├── storage/             # usage: memory/postgres/redis, counter: memory/redis
+│   ├── risk/                # iptables-style rule chains
+│   ├── transport/echo/      # HTTP layer
+│   ├── configctl/            # CLI config workflow (diff/danger/secret merge)
+│   ├── config/              # config + validation
+│   ├── configstore/         # history dir, atomic writes, rollback
+│   ├── logging/             # zap wrapper
 │   └── metrics/             # Prometheus
-├── configs/                  # 示例配置
+├── configs/                  # example configs
 ├── migrations/               # PostgreSQL DDL
 └── deploy/
-    ├── nginx/               # Nginx 接入示例
+    ├── nginx/               # Nginx integration example
     ├── systemd/             # systemd unit
-    └── observability/       # 告警 + Grafana
+    └── observability/       # alerts + Grafana
 ```
 
-## 部署
+## Deployment
 
 ### systemd
 
@@ -334,31 +363,32 @@ createdb mirrors_pow
 make migrate-up
 ```
 
-## 开发
+## Development
 
 ```bash
-make build          # 编译 server
-make build-cli      # 编译 garmr CLI
-make test           # 单元测试
-make test-race      # race detector（需 CGO，Windows 上需装 gcc）
-make coverage       # 覆盖率
-make lint           # golangci-lint（未安装时退回 go vet）
+make build          # build the server
+make build-cli      # build the garmr CLI
+make test           # unit tests
+make test-race      # race detector (needs CGO; gcc on Windows)
+make coverage       # coverage summary
+make lint           # golangci-lint (falls back to go vet)
 
-# PostgreSQL 真实集成测试（使用独立 schema，不会删除数据库中的其他表）
+# PostgreSQL integration tests (own schema; other tables untouched)
 POSTGRES_TEST_DSN='postgres://user:pass@127.0.0.1:5432/mirrors_pow?sslmode=disable' make test-postgres
-go test -tags=benchmark -bench=. ./internal/app/...  # 压测
+go test -tags=benchmark -bench=. ./internal/app/...  # benchmarks
 ```
 
-`make coverage` 用 `-coverpkg=./...` 把全仓生产代码纳入统计。PostgreSQL 集成测试需要设置 `POSTGRES_TEST_DSN`，否则跳过。
+`make coverage` uses `-coverpkg=./...` so all production code counts.
+PostgreSQL integration tests are skipped unless `POSTGRES_TEST_DSN` is set.
 
-基线（i7-14650HX，内存存储）：
+Baseline (i7-14650HX, in-memory storage):
 
-| 场景 | QPS |
+| Scenario | QPS |
 |---|---|
-| 非保护路径 | 209k |
-| 保护路径无 token | 114k |
-| 非法 token | 98k |
+| unprotected path | 209k |
+| protected path, no token | 114k |
+| invalid token | 98k |
 
-## 许可证
+## License
 
 [MIT](LICENSE)
