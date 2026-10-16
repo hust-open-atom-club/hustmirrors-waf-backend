@@ -459,7 +459,11 @@ func applyPrompt(plan configctl.Plan) bool {
 	if plan.ConfirmationRequired() {
 		fmt.Printf("确认短语: %s\n", plan.Phrase)
 		fmt.Print("输入确认短语: ")
-		phrase := readLine()
+		phrase, ok := readLine()
+		if !ok {
+			fmt.Println("stdin 已关闭，已放弃。")
+			return false
+		}
 		if phrase != plan.Phrase {
 			fmt.Println("短语不匹配。")
 			return false
@@ -472,21 +476,36 @@ func applyPrompt(plan configctl.Plan) bool {
 func promptRequired(label string) string {
 	for {
 		fmt.Print(label)
-		value := strings.TrimSpace(readLine())
+		value, ok := readLine()
+		if !ok {
+			exitf("stdin 已关闭，未提供%s", strings.TrimSuffix(label, ": "))
+		}
 		if value != "" {
 			return value
 		}
 	}
 }
 
-func readLine() string {
-	reader := bufio.NewReader(os.Stdin)
-	line, _ := reader.ReadString('\n')
-	return strings.TrimSpace(line)
+// stdinReader is shared so a piped multi-line answer is not swallowed by a
+// fresh buffer on every prompt.
+var stdinReader = bufio.NewReader(os.Stdin)
+
+// readLine reads one trimmed line. ok is false when stdin is exhausted, so
+// prompts can fail fast instead of spinning on EOF.
+func readLine() (string, bool) {
+	line, err := stdinReader.ReadString('\n')
+	if err != nil && line == "" {
+		return "", false
+	}
+	return strings.TrimSpace(line), true
 }
 
 func confirm(defaultYes bool) bool {
-	answer := strings.ToLower(readLine())
+	answer, ok := readLine()
+	if !ok {
+		return defaultYes
+	}
+	answer = strings.ToLower(answer)
 	if answer == "" {
 		return defaultYes
 	}
