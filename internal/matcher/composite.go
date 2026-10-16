@@ -39,6 +39,16 @@ type NoopMatcher struct{}
 
 func (NoopMatcher) ShouldProtect(_ string) bool { return false }
 
+// Union matches when either side matches. This is how extension rules and
+// regex rules combine: a path is protected if it hits either list.
+type Union struct{ a, b Matcher }
+
+func NewUnion(a, b Matcher) Union { return Union{a: a, b: b} }
+
+func (u Union) ShouldProtect(path string) bool {
+	return u.a.ShouldProtect(path) || u.b.ShouldProtect(path)
+}
+
 type AlwaysMatcher struct{}
 
 func (AlwaysMatcher) ShouldProtect(_ string) bool { return true }
@@ -46,7 +56,7 @@ func (AlwaysMatcher) ShouldProtect(_ string) bool { return true }
 var (
 	_ Matcher = (*Composite)(nil)
 	_ Matcher = NoopMatcher{}
+	_ Matcher = Union{}
 	_ Matcher = AlwaysMatcher{}
 	_ Matcher = (*ExtensionMatcher)(nil)
-	_ Matcher = (*RegexMatcher)(nil)
 )

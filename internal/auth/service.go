@@ -198,7 +198,13 @@ func (s *Service) Verify(ctx context.Context, req AuthRequest) AuthResult {
 	// Light-weight PoW classification: missing / valid / invalid / expired.
 	// We do NOT increment usage here; that happens only when the risk
 	// engine decides to allow the request via PoW.
+	//
+	// The classification must reach the risk engine even when no token was
+	// presented: rules match on pow_status=missing, and leaving the field
+	// empty made every such rule (including the JUMP into the risk-check
+	// chain in the example config) silently unmatchable.
 	powStatus := "missing"
+	riskReq.PowStatus = powStatus
 	var payload *pow.TokenPayload
 	if tokenRaw != "" && sign != "" {
 		var powMode string

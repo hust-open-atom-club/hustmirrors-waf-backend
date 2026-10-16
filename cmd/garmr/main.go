@@ -13,6 +13,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"sort"
@@ -382,7 +383,13 @@ func rulePreview(configDefault string, args []string) {
 	if err != nil {
 		exitf("evaluate: %v", err)
 	}
-	fmt.Printf("decision: %s (HTTP %d)  chain=%s rule=%s\n", result.Decision.Target, result.Decision.StatusCode, result.Decision.Chain, dashEmpty(result.Decision.RuleName))
+	status := result.Decision.StatusCode
+	if status == 0 {
+		// ACCEPT and RATE_LIMIT pass the request through; only REJECT and
+		// TOO_MANY carry an explicit status in config.
+		status = http.StatusOK
+	}
+	fmt.Printf("decision: %s (HTTP %d)  chain=%s rule=%s\n", result.Decision.Target, status, result.Decision.Chain, dashEmpty(result.Decision.RuleName))
 	fmt.Printf("reason:   %s\n", result.Decision.Reason)
 	if result.Decision.LimitRate != "" && result.Decision.LimitRate != "0" {
 		fmt.Printf("limit:    %s\n", result.Decision.LimitRate)
@@ -399,21 +406,27 @@ func rulePreview(configDefault string, args []string) {
 	}
 }
 
-// buildMatcher assembles the protection matcher the same way the service
-// does, so rule preview sees the same protected-path classification.
+// buildMatcher assembles the protection matcher exactly the way the service
+// does (extensions union regex, minus exclusions), so rule preview sees the
+// same protected-path classification. A bad pattern is fatal here, matching
+// startup behaviour rather than silently dropping a rule list.
 func buildMatcher(cfg *config.Config) *matcher.Composite {
 	ext := matcher.NewExtensionMatcher(cfg.Protection.ProtectedExtensions)
 	protected := matcher.Matcher(ext)
 	if len(cfg.Protection.ProtectedPaths) > 0 {
-		if regex, err := matcher.NewRegexMatcher(cfg.Protection.ProtectedPaths); err == nil {
-			protected = regex
+		regex, err := matcher.NewRegexMatcher(cfg.Protection.ProtectedPaths)
+		if err != nil {
+			exitf("compile protection.protected_paths: %v", err)
 		}
+		protected = matcher.NewUnion(ext, regex)
 	}
 	var excluded matcher.Matcher
 	if len(cfg.Protection.ExcludedPaths) > 0 {
-		if regex, err := matcher.NewRegexMatcher(cfg.Protection.ExcludedPaths); err == nil {
-			excluded = regex
+		regex, err := matcher.NewRegexMatcher(cfg.Protection.ExcludedPaths)
+		if err != nil {
+			exitf("compile protection.excluded_paths: %v", err)
 		}
+		excluded = regex
 	}
 	return matcher.NewComposite(protected, excluded)
 }

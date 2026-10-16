@@ -311,7 +311,7 @@ func buildProtectedMatcher(cfg *config.Config) (matcher.Matcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("app: compile protection.protected_paths: %w", err)
 	}
-	return unionMatcher{a: ext, b: regex}, nil
+	return matcher.NewUnion(ext, regex), nil
 }
 
 // buildExcludedMatcher builds the exclusion matcher. As above, a bad
@@ -326,12 +326,6 @@ func buildExcludedMatcher(cfg *config.Config) (matcher.Matcher, error) {
 		return nil, fmt.Errorf("app: compile protection.excluded_paths: %w", err)
 	}
 	return regex, nil
-}
-
-type unionMatcher struct{ a, b matcher.Matcher }
-
-func (u unionMatcher) ShouldProtect(p string) bool {
-	return u.a.ShouldProtect(p) || u.b.ShouldProtect(p)
 }
 
 func buildStorage(ctx context.Context, cfg *config.Config, m *metrics.Container, logger logging.Logger) (storage.UsageStore, storage.CounterStore, *redis.Client, func() error, error) {
