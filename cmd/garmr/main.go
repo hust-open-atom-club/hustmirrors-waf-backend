@@ -369,6 +369,12 @@ func rulePreview(configDefault string, args []string) {
 	if err := fs.Parse(args); err != nil {
 		exitf("%v", err)
 	}
+	// A path missing its leading slash usually means the shell rewrote it
+	// (Git Bash converts /foo to C:/Program Files/Git/foo), which silently
+	// changes what the rules see.
+	if *path != "" && !strings.HasPrefix(*path, "/") {
+		fmt.Fprintf(os.Stderr, "warning: path %q does not start with '/'; under Git Bash this is usually an MSYS path conversion - set MSYS_NO_PATHCONV=1\n", *path)
+	}
 	cfg := loadConfig(configDefault)
 	engine, err := risk.FromConfig(cfg.RiskControl)
 	if err != nil {
