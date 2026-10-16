@@ -105,6 +105,26 @@ func TestIPPendingBlocker_DoesNotTrackEmptyIP(t *testing.T) {
 	assert.Empty(t, b.entries)
 }
 
+func TestIPPendingBlocker_AutoBlockHookFiresOnOverflow(t *testing.T) {
+	calls := 0
+	b := NewIPPendingBlocker(1, time.Hour, func() { calls++ })
+	defer b.Close()
+
+	release, blocked := b.Enter("192.0.2.9")
+	require.False(t, blocked)
+	assert.Equal(t, 0, calls, "no hook before the limit is hit")
+
+	_, blocked = b.Enter("192.0.2.9")
+	assert.True(t, blocked)
+	assert.Equal(t, 1, calls, "overflow must report the automatic block")
+
+	_, blocked = b.Enter("192.0.2.9")
+	assert.True(t, blocked)
+	assert.Equal(t, 1, calls, "repeat rejections inside the block must not re-count")
+
+	release()
+}
+
 func TestCanonicalIPRejectsInvalidAndCIDR(t *testing.T) {
 	tests := []struct {
 		name string

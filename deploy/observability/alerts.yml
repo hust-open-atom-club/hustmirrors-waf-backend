@@ -83,9 +83,19 @@ groups:
           summary: "mirrors-waf-backend storage errors"
           description: "Storage operations are failing. Check PostgreSQL/Redis connectivity."
 
+      # The emergency bypass is on: PoW and the normal risk chains are skipped.
+      - alert: MirrorsWafBypassAllActive
+        expr: max(mirrors_waf_pow_flags{flag="bypass_all"}) == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "mirrors-waf-backend bypass_all is ON"
+          description: "pow.bypass_all is enabled: every request passes without PoW or risk checks."
+
       # Dry-run mode is active.
       - alert: MirrorsWafDryRunInProd
-        expr: mirrors_waf_pow_verify_total{reason="dry_run_allow"} > 0
+        expr: max(mirrors_waf_pow_flags{flag="dry_run"}) == 1
         for: 10m
         labels:
           severity: info

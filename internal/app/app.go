@@ -81,6 +81,13 @@ func build(ctx context.Context, cfg *config.Config, loaded *config.Loaded) (*App
 		logger.Warn(ctx, "metrics register failed (continuing)", logging.Err(regErr))
 	}
 
+	// Runtime switches as 0/1 gauges. Read once at startup: the service
+	// applies config changes only after a restart.
+	powEnabled := cfg.Pow.Enabled == nil || *cfg.Pow.Enabled
+	m.PowFlags.WithLabelValues("enabled").Set(metrics.BoolValue(powEnabled))
+	m.PowFlags.WithLabelValues("dry_run").Set(metrics.BoolValue(cfg.Pow.DryRun))
+	m.PowFlags.WithLabelValues("bypass_all").Set(metrics.BoolValue(cfg.Pow.BypassAll))
+
 	clk := clock.New()
 
 	protected, err := buildProtectedMatcher(cfg)
@@ -107,6 +114,7 @@ func build(ctx context.Context, cfg *config.Config, loaded *config.Loaded) (*App
 		pendingBlocker = risk.NewIPPendingBlocker(
 			cfg.RiskControl.Pending.MaxPerIP,
 			cfg.RiskControl.Pending.BlockTTL,
+			m.PendingAutoBlocks.Inc,
 		)
 	}
 	if cfg.RiskControl.Enabled {

@@ -96,7 +96,8 @@ func TestMetrics_LatencyCarriesModeLabel(t *testing.T) {
 		"no sample may land on the empty mode label")
 }
 
-// TestMetrics_VerifyTotalIsEmitted covers the counter alongside the histogram.
+// TestMetrics_VerifyTotalIsEmitted covers the counter alongside the histogram,
+// including the protected label that separates shielded paths from the rest.
 func TestMetrics_VerifyTotalIsEmitted(t *testing.T) {
 	svc, m := makeMetricsService(t, nil, nil)
 	svc.Verify(context.Background(), AuthRequest{
@@ -105,7 +106,16 @@ func TestMetrics_VerifyTotalIsEmitted(t *testing.T) {
 		RealIP:         "1.2.3.4",
 	})
 	assert.Equal(t, float64(1), testutil.ToFloat64(
-		m.PowVerifyTotal.WithLabelValues("deny", ReasonMissingTokenOrSign, "")))
+		m.PowVerifyTotal.WithLabelValues("deny", ReasonMissingTokenOrSign, "", "true")))
+
+	svc.Verify(context.Background(), AuthRequest{
+		OriginalURI:    "/index.html",
+		OriginalMethod: "GET",
+		RealIP:         "1.2.3.4",
+	})
+	assert.Equal(t, float64(1), testutil.ToFloat64(
+		m.PowVerifyTotal.WithLabelValues("allow", ReasonNotProtected, "", "false")),
+		"an unprotected path must be counted with protected=false")
 }
 
 // TestMetrics_RiskDecisionIsEmitted proves risk_decision_total — previously

@@ -94,7 +94,7 @@ func TestLogSwitches_ControlWhichOutcomesAreLogged(t *testing.T) {
 		assert.Zero(t, logs.FilterMessageSnippet("pow_verify").Len())
 		// The metric is still recorded.
 		assert.Equal(t, float64(1), testutil.ToFloat64(
-			svc.metrics.PowVerifyTotal.WithLabelValues("deny", ReasonMissingTokenOrSign, "")),
+			svc.metrics.PowVerifyTotal.WithLabelValues("deny", ReasonMissingTokenOrSign, "", "true")),
 			"metrics must not be affected by a logging switch")
 	})
 

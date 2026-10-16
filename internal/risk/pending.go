@@ -27,30 +27,38 @@ type pendingEntry struct {
 // IPPendingBlocker is an in-process pending-request limiter that protects one
 // backend instance; state is lost on restart and is not shared across replicas.
 type IPPendingBlocker struct {
-	mu        sync.Mutex
-	maxPerIP  int
-	blockTTL  time.Duration
-	entries   map[string]pendingEntry
-	closed    bool
-	now       func() time.Time
-	lastSweep time.Time
+	mu          sync.Mutex
+	maxPerIP    int
+	blockTTL    time.Duration
+	entries     map[string]pendingEntry
+	closed      bool
+	now         func() time.Time
+	lastSweep   time.Time
+	onAutoBlock func()
 }
 
 const pendingSweepInterval = 30 * time.Second
 
-func NewIPPendingBlocker(maxPerIP int, blockTTL time.Duration) *IPPendingBlocker {
+// NewIPPendingBlocker creates the limiter. onAutoBlock, when provided, is
+// invoked every time an overflow starts a new automatic block; callers pass a
+// counter increment so this package stays free of metrics dependencies.
+func NewIPPendingBlocker(maxPerIP int, blockTTL time.Duration, onAutoBlock ...func()) *IPPendingBlocker {
 	if maxPerIP < 1 {
 		maxPerIP = 1
 	}
 	if blockTTL <= 0 {
 		blockTTL = time.Hour
 	}
-	return &IPPendingBlocker{
+	b := &IPPendingBlocker{
 		maxPerIP: maxPerIP,
 		blockTTL: blockTTL,
 		entries:  make(map[string]pendingEntry),
 		now:      time.Now,
 	}
+	if len(onAutoBlock) > 0 {
+		b.onAutoBlock = onAutoBlock[0]
+	}
+	return b
 }
 
 // CanonicalIP validates one IP address and normalises IPv4-mapped IPv6.
@@ -96,6 +104,11 @@ func (b *IPPendingBlocker) Enter(ip string) (func(), bool) {
 	if entry.pending >= b.maxPerIP {
 		entry.autoBlockedUntil = now.Add(b.blockTTL)
 		b.entries[canonical] = entry
+		// The hook is a counter increment (atomic, non-blocking), so calling
+		// it under the lock keeps the trigger and the count consistent.
+		if b.onAutoBlock != nil {
+			b.onAutoBlock()
+		}
 		return func() {}, true
 	}
 

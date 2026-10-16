@@ -143,6 +143,11 @@ func (s *Service) Verify(ctx context.Context, req AuthRequest) AuthResult {
 	// NOTE: the latency histogram is observed inside recordResult, not in a
 	// defer here, so that the "mode" label is populated. Every return path
 	// below calls recordResult exactly once.
+	//
+	// Protection matching runs up front so every recorded result carries the
+	// protected label, including the early bypass/missing-header exits.
+	protected := s.matcher.ShouldProtect(req.OriginalURI)
+	vctx.protected = &protected
 
 	if s.bypassAllEffective() {
 		res := allowDecision(ReasonBypassAll, "", DecisionBypass)
@@ -156,7 +161,6 @@ func (s *Service) Verify(ctx context.Context, req AuthRequest) AuthResult {
 		return res
 	}
 
-	protected := s.matcher.ShouldProtect(req.OriginalURI)
 	pendingEnabled := s.cfg.RiskControl.Pending.Enabled == nil || *s.cfg.RiskControl.Pending.Enabled
 	if protected && s.cfg.RiskControl.Enabled && pendingEnabled && s.pendingBlocker != nil && !s.bypassAllEffective() {
 		release, blocked := s.pendingBlocker.Enter(req.RealIP)

@@ -220,10 +220,12 @@ Nginx 配置移除 `auth_request`，直接走 `try_files`。后端可停掉。
 
 | 指标 | 说明 | 告警阈值 |
 |---|---|---|
-| `mirrors_waf_pow_verify_total` | 验证次数（按 result/reason/mode） | deny 比例 > 30% 持续 5 分钟 |
+| `mirrors_waf_pow_verify_total` | 验证次数，按 `result`/`reason`/`mode`/`protected`（拦截=`result="deny"`，通过=`result="allow"`） | deny 比例 > 30% 持续 5 分钟 |
 | `mirrors_waf_pow_verify_latency_seconds` | 验证延迟 | p99 > 100ms |
 | `mirrors_waf_storage_operations_total` | 存储操作 | error 比例 > 1% |
 | `mirrors_waf_risk_decision_total` | 风控决策 | TOO_MANY 比例突增 |
+| `mirrors_waf_pending_auto_blocks_total` | pending 并发超限触发的临时封禁次数 | 持续增长说明有 IP 并发滥用 |
+| `mirrors_waf_pow_flags{flag="enabled\|dry_run\|bypass_all"}` | 运行时开关，0/1 | `dry_run`/`bypass_all` = 1 需处理 |
 
 ### Grafana Dashboard
 
@@ -232,6 +234,33 @@ Nginx 配置移除 `auth_request`，直接走 `try_files`。后端可停掉。
 ### 告警规则
 
 见 `deploy/observability/alerts.yml`，配 Prometheus Alertmanager。
+
+### InfluxDB 3（telegraf 接入）
+
+Garmr 不直接写 InfluxDB：它以 Prometheus 格式暴露指标，由 telegraf 抓取入库，与镜像站其他遥测共用同一条采集链路。示例片段见 `deploy/observability/telegraf-pow.conf`（telegraf 1.38+，InfluxDB 3 原生 `/api/v3/write_lp` 端点）：
+
+```toml
+[[inputs.prometheus]]
+  urls = ["http://127.0.0.1:8080/metrics"]
+  metric_version = 2
+  namepass = ["mirrors_waf_*"]
+
+[[outputs.influxdb_v3]]
+  urls = ["http://127.0.0.1:8181"]
+  database = "mirrors"
+  token = "${INFLUX_TOKEN}"
+```
+
+拦截总数与通过数量直接来自 `mirrors_waf_pow_verify_total`（`result="deny"` / `"allow"`），并带 `reason` / `mode` / `protected` 维度，可在 InfluxDB 里按需聚合。
+
+**流量数据在 Nginx 侧采集**：Garmr 只做鉴权，不接触文件字节。要让放行流量带上 PoW 决策维度，在 `log_format` 里引用大文件 location 已设置的变量即可：
+
+```nginx
+log_format pow '$remote_addr "$request" $status $body_bytes_sent '
+               'decision=$pow_decision rate=$pow_limit_bytes';
+```
+
+`$pow_decision`（verified / unverified_slow / denied…）和 `$pow_limit_bytes` 来自 `mirrors-waf.conf` 里的 `auth_request_set`；再由 telegraf 解析该日志（`inputs.tail`），或并入现有的 Nginx 日志采集管线。
 
 ## 9. 压测
 

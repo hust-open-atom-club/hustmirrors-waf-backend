@@ -38,6 +38,10 @@ type verifyCtx struct {
 	signID  string
 	uses    int
 	maxUses int
+
+	// protected is the protection-matching verdict for the request path.
+	// nil when the request exited before matching (bypass, missing URI).
+	protected *bool
 }
 
 // recordResult writes the metrics counter + structured log line for one
@@ -53,6 +57,7 @@ func (s *Service) recordResult(vctx verifyCtx, res AuthResult) {
 			statusBucket(res.Allowed),
 			res.Reason,
 			res.Mode,
+			protectedLabel(vctx.protected),
 		).Inc()
 		s.metrics.PowVerifyLatencySeconds.
 			WithLabelValues(res.Mode).
@@ -108,6 +113,19 @@ func (s *Service) recordResult(vctx verifyCtx, res AuthResult) {
 		s.logger.Warn(context.Background(), "pow_verify", all...)
 	default:
 		s.logger.Info(context.Background(), "pow_verify", all...)
+	}
+}
+
+// protectedLabel renders the tri-state protection verdict for metric labels.
+// "unknown" only appears on paths that exit before matching runs.
+func protectedLabel(p *bool) string {
+	switch {
+	case p == nil:
+		return "unknown"
+	case *p:
+		return "true"
+	default:
+		return "false"
 	}
 }
 
