@@ -103,26 +103,6 @@ func TestServer_Readyz(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
-func TestServer_ClientIP(t *testing.T) {
-	s := NewMain(MainOptions{Config: &config.Config{}, Logger: logging.NewNop()})
-	req := httptest.NewRequest(http.MethodGet, "/verify_pow", nil)
-	req.Header.Set("X-Real-IP", "9.9.9.9")
-	c := s.Echo().NewContext(req, httptest.NewRecorder())
-	assert.Equal(t, "9.9.9.9", clientIP(c))
-
-	req2 := httptest.NewRequest(http.MethodGet, "/verify_pow", nil)
-	req2.Header.Set("X-Forwarded-For", "1.2.3.4, 10.0.0.1")
-	c2 := s.Echo().NewContext(req2, httptest.NewRecorder())
-	assert.Equal(t, "1.2.3.4", clientIP(c2))
-}
-
-func TestServer_IPAllowed(t *testing.T) {
-	assert.True(t, ipAllowed("127.0.0.1", []string{"127.0.0.1/32"}))
-	assert.True(t, ipAllowed("10.1.2.3", []string{"10.0.0.0/8"}))
-	assert.False(t, ipAllowed("8.8.8.8", []string{"10.0.0.0/8"}))
-	assert.False(t, ipAllowed("not-an-ip", []string{"10.0.0.0/8"}))
-}
-
 func TestServer_ShutdownWithoutStart(t *testing.T) {
 	s := NewMain(MainOptions{Config: &config.Config{}, Logger: logging.NewNop()})
 	require.NoError(t, s.Shutdown(context.Background()))

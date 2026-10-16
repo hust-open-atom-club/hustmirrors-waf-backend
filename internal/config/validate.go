@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"net"
 	"regexp"
 	"strings"
 
@@ -152,7 +151,8 @@ func (e *ValidationError) checkRiskControl(rc RiskControlConfig) {
 			e.add("risk_control.chains.%s.policy: limit_rate %q is malformed", chainName, chain.Policy.LimitRate)
 		}
 
-		for i, rule := range chain.Rules {
+		for i := range chain.Rules {
+			rule := &chain.Rules[i]
 			if rule.Name == "" {
 				e.add("risk_control.chains.%s.rules[%d]: name is required", chainName, i)
 			}
@@ -222,25 +222,6 @@ func (e *ValidationError) checkRiskControl(rc RiskControlConfig) {
 	}
 }
 
-// isLoopbackListen reports whether a listen address is confined to the
-// local host. A bare port or an empty host (":8081", "8081") binds all
-// interfaces and is therefore not loopback.
-func isLoopbackListen(listen string) bool {
-	host, _, err := net.SplitHostPort(listen)
-	if err != nil {
-		// Not host:port - treat as non-loopback rather than guessing.
-		return false
-	}
-	if host == "" {
-		return false
-	}
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}
-
 // isValidTarget mirrors risk.IsValid{Rule,Policy}Target, which cannot be
 // called directly: risk imports config, so the reverse is an import cycle.
 // TestTargetValidators_MatchConfigValidation keeps the two in step.
@@ -280,9 +261,8 @@ func chainExistsCaseInsensitive(chains map[string]ChainConfig, name string) bool
 	if _, ok := chains[name]; ok {
 		return true
 	}
-	upper := strings.ToUpper(name)
 	for k := range chains {
-		if strings.ToUpper(k) == upper {
+		if strings.EqualFold(k, name) {
 			return true
 		}
 	}
@@ -317,7 +297,8 @@ func (e *ValidationError) detectCycles(rc RiskControlConfig) {
 			color[upper] = black
 			return false
 		}
-		for _, r := range chain.Rules {
+		for i := range chain.Rules {
+			r := &chain.Rules[i]
 			if r.Target == "JUMP" && r.Chain != "" {
 				if visit(r.Chain, append(path, name)) {
 					return true

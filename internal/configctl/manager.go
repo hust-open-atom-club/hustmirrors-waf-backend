@@ -332,10 +332,6 @@ func dangerRank(value string) int {
 	}
 }
 
-// phraseMatches is kept for library consumers that pre-validate the
-// confirmation phrase programmatically.
-func (p Plan) phraseMatches(input string) bool { return input != "" && input == p.Phrase }
-
 func confirmToken(n int) string {
 	b := make([]byte, n)
 	if _, err := readRandom(b); err != nil {

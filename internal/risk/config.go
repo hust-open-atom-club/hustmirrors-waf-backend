@@ -34,10 +34,10 @@ func compileChain(name string, cc config.ChainConfig) (*Chain, error) {
 			Reason:    cc.Policy.Reason,
 		},
 	}
-	for i, rc := range cc.Rules {
-		rule, err := compileRule(rc)
+	for i := range cc.Rules {
+		rule, err := compileRule(cc.Rules[i])
 		if err != nil {
-			return nil, fmt.Errorf("rule[%d] %q: %w", i, rc.Name, err)
+			return nil, fmt.Errorf("rule[%d] %q: %w", i, cc.Rules[i].Name, err)
 		}
 		chain.Rules = append(chain.Rules, rule)
 	}

@@ -69,9 +69,8 @@ func (e *Engine) lookupChain(name string) (*Chain, bool) {
 	if c, ok := e.chains[name]; ok {
 		return c, true
 	}
-	upper := strings.ToUpper(name)
 	for k, v := range e.chains {
-		if strings.ToUpper(k) == upper {
+		if strings.EqualFold(k, name) {
 			return v, true
 		}
 	}

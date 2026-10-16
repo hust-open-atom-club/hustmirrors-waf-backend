@@ -98,9 +98,9 @@ func TestDraftCASAndExpiry(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := store.SaveDraft(1, tt.id, tt.expectedRevision, []byte("rejected"))
-			if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("SaveDraft() error = %v, want %v", err, tt.wantErr)
+			_, saveErr := store.SaveDraft(1, tt.id, tt.expectedRevision, []byte("rejected"))
+			if !errors.Is(saveErr, tt.wantErr) {
+				t.Fatalf("SaveDraft() error = %v, want %v", saveErr, tt.wantErr)
 			}
 		})
 	}
@@ -146,8 +146,8 @@ func TestApplyAtomicallyReplacesCurrentAndRecordsHistory(t *testing.T) {
 	if result.Revision != 2 || result.Previous != 1 || result.Meta.Action != "apply" {
 		t.Fatalf("Apply() result = %+v", result)
 	}
-	if got, err := os.ReadFile(path); err != nil || string(got) != "version: 2\n" {
-		t.Fatalf("active file = %q, error = %v", got, err)
+	if got, readErr := os.ReadFile(path); readErr != nil || string(got) != "version: 2\n" {
+		t.Fatalf("active file = %q, error = %v", got, readErr)
 	}
 	status := store.Status()
 	if status.CurrentRevision != 2 || !status.CurrentUpdatedAt.Equal(appliedAt) || !status.PendingRestart || status.Draft != nil {
@@ -239,7 +239,7 @@ func TestFailedApplyDoesNotPublishPhantomRevision(t *testing.T) {
 	store.path = failurePath
 	store.raw = append([]byte(nil), existing...)
 
-	if _, err := store.Apply(ApplyRequest{Raw: []byte("must not publish"), ExpectedRevision: 1}); err == nil {
+	if _, applyErr := store.Apply(ApplyRequest{Raw: []byte("must not publish"), ExpectedRevision: 1}); applyErr == nil {
 		t.Fatal("Apply() error = nil, want replacement failure")
 	}
 	revision, raw, err := store.Current()

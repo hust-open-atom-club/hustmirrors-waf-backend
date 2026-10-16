@@ -77,8 +77,8 @@ func build(ctx context.Context, cfg *config.Config, loaded *config.Loaded) (*App
 	)
 
 	m := metrics.New()
-	if err := m.Register(); err != nil {
-		logger.Warn(ctx, "metrics register failed (continuing)", logging.Err(err))
+	if regErr := m.Register(); regErr != nil {
+		logger.Warn(ctx, "metrics register failed (continuing)", logging.Err(regErr))
 	}
 
 	clk := clock.New()
@@ -363,8 +363,8 @@ func buildStorage(ctx context.Context, cfg *config.Config, m *metrics.Container,
 	case "postgres":
 		pool, err := pgstore.OpenPool(ctx, pgstore.PoolConfig{
 			DSN:          cfg.Storage.Postgres.DSN,
-			MaxOpenConns: int32(cfg.Storage.Postgres.MaxOpenConns),
-			MaxIdleConns: int32(cfg.Storage.Postgres.MaxIdleConns),
+			MaxOpenConns: cfg.Storage.Postgres.MaxOpenConns,
+			MaxIdleConns: cfg.Storage.Postgres.MaxIdleConns,
 		})
 		if err != nil {
 			if redisClient != nil {

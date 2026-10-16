@@ -12,7 +12,7 @@ import (
 
 func requestIDMiddleware(logger logging.Logger) echov4.MiddlewareFunc {
 	mw := middleware.RequestIDWithConfig(middleware.RequestIDConfig{
-		Generator: func() string { return generateRequestID() },
+		Generator: generateRequestID,
 	})
 	return func(next echov4.HandlerFunc) echov4.HandlerFunc {
 		wrapped := mw(next)

@@ -17,6 +17,11 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+// run holds main's body so deferred cleanup executes on every exit path.
+func run() int {
 	configPath := flag.String("config", "", "Path to the YAML config file (optional; auto-discovered if empty)")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
@@ -29,13 +34,13 @@ func main() {
 
 	if *showVersion {
 		fmt.Println(version.Get())
-		return
+		return 0
 	}
 
 	loaded, err := config.LoadWithSource(*configPath, configExplicit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "config load failed: %v\n", err)
-		os.Exit(2)
+		return 2
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -44,7 +49,7 @@ func main() {
 	a, err := app.BuildWithLoaded(ctx, loaded)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "app build failed: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	sigCh := make(chan os.Signal, 1)
@@ -62,6 +67,7 @@ func main() {
 
 	if err := a.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

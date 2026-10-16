@@ -75,8 +75,8 @@ type StorageConfig struct {
 
 type PostgresConfig struct {
 	DSN          string `mapstructure:"dsn"`
-	MaxOpenConns int    `mapstructure:"max_open_conns"`
-	MaxIdleConns int    `mapstructure:"max_idle_conns"`
+	MaxOpenConns int32  `mapstructure:"max_open_conns"`
+	MaxIdleConns int32  `mapstructure:"max_idle_conns"`
 }
 
 type RedisConfig struct {

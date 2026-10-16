@@ -271,7 +271,8 @@ func configHistory(path string) {
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "REVISION\tPARENT\tACTION\tCHANGED\tDANGER\tACTOR\tWHEN\tREASON")
-	for _, item := range items {
+	for i := range items {
+		item := &items[i]
 		reason := item.Reason
 		if item.RollbackTarget > 0 {
 			reason = fmt.Sprintf("rollback -> #%d %s", item.RollbackTarget, reason)
@@ -344,7 +345,8 @@ func ruleList(path string) {
 	for _, name := range names {
 		chain := cfg.RiskControl.Chains[name]
 		fmt.Fprintf(w, "chain %s\tpolicy: %s\n", name, chain.Policy.Target)
-		for i, rule := range chain.Rules {
+		for i := range chain.Rules {
+			rule := &chain.Rules[i]
 			target := rule.Target
 			if rule.Chain != "" {
 				target = target + " -> " + rule.Chain

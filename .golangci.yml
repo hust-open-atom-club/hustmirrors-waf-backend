@@ -1,54 +1,70 @@
+version: "2"
 run:
-  timeout: 5m
-  tests: false
-
+  tests: true
 linters:
-  disable-all: true
+  default: none
   enable:
-    - govet
-    - staticcheck
-    - ineffassign
-    - unused
     - gocritic
+    - gomodguard_v2
     - gosec
-    - revive
+    - govet
+    - ineffassign
     - misspell
-    - gomodguard
-
-linters-settings:
-  govet:
-    enable:
-      - shadow
-  staticcheck:
-    checks: ["all"]
-  gocritic:
-    enabled-tags:
-      - performance
-      - diagnostic
-    disabled-checks:
-      - hugeParam
-  gosec:
-    excludes:
-      - G104  # unhandled error - we use errcheck-like discipline manually
-      - G304  # file inclusion via variable - safe in our context
-  revive:
-    severity: warning
+    - revive
+    - staticcheck
+    - unused
+  settings:
+    gocritic:
+      disabled-checks:
+        - hugeParam
+      enabled-tags:
+        - performance
+        - diagnostic
+    gosec:
+      excludes:
+        - G104
+        - G304
+    govet:
+      enable:
+        - shadow
+    revive:
+      severity: warning
+      rules:
+        - name: exported
+          disabled: true
+        - name: var-naming
+          disabled: true
+        - name: package-comments
+          disabled: true
+    staticcheck:
+      checks:
+        - all
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: exported
-        disabled: true
-      - name: var-naming
-        disabled: true
-      - name: package-comments
-        disabled: true
-
+      - linters:
+          - gocritic
+          - gosec
+        path: _test\.go
+      - linters:
+          - gosec
+        path: cmd/
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gosec
-        - gocritic
-    - path: cmd/
-      linters:
-        - gosec
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

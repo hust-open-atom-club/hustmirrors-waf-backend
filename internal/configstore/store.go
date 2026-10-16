@@ -1,6 +1,7 @@
 package configstore
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -150,7 +151,7 @@ func New(path string, raw []byte, managed bool) (*Store, error) {
 		if err != nil {
 			return nil, err
 		}
-		if string(latest) != string(s.raw) {
+		if !bytes.Equal(latest, s.raw) {
 			next := s.revision + 1
 			meta := RevisionMeta{Revision: next, ParentRevision: s.revision, Action: "external", CreatedAt: s.now(), RestartRequired: false}
 			if err := s.writeRevisionLocked(meta, s.raw); err != nil {
@@ -340,7 +341,7 @@ func (s *Store) checkExternalLocked() error {
 	if err != nil {
 		return err
 	}
-	if string(raw) != string(s.raw) {
+	if !bytes.Equal(raw, s.raw) {
 		return ErrConflict
 	}
 	return nil
@@ -351,10 +352,10 @@ func (s *Store) loadHistory() error {
 	if err != nil {
 		return err
 	}
-	for _, item := range items {
-		if item.Revision > s.revision {
-			s.revision = item.Revision
-			s.updated = item.CreatedAt
+	for i := range items {
+		if items[i].Revision > s.revision {
+			s.revision = items[i].Revision
+			s.updated = items[i].CreatedAt
 		}
 	}
 	// Keep the exact active file bytes passed by the loader. The history
