@@ -3,7 +3,6 @@ package risk
 import (
 	"errors"
 	"net/netip"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -11,8 +10,6 @@ import (
 
 var (
 	ErrInvalidBlockIP = errors.New("risk: invalid block IP")
-	ErrInvalidBlock   = errors.New("risk: invalid block request")
-	ErrBlockerClosed  = errors.New("risk: pending blocker is closed")
 )
 
 // PendingBlocker limits the number of concurrent protected requests from one
@@ -22,60 +19,13 @@ type PendingBlocker interface {
 	Close() error
 }
 
-// ManualBlockChecker is the minimal capability used by the auth path. Manual
-// operator blocks are checked before bypass_all and protection matching.
-type ManualBlockChecker interface {
-	ManuallyBlocked(ip string) bool
-}
-
-// IPBlockAdmin is the mutation capability exposed to the admin service.
-type IPBlockAdmin interface {
-	Block(ip string, input BlockInput) (BlockResult, error)
-	Unblock(ip string) (BlockResult, error)
-}
-
-type BlockInput struct {
-	TTL    time.Duration
-	Reason string
-	Actor  string
-}
-
-type BlockResult struct {
-	Changed bool
-	State   PendingSnapshot
-}
-
 type pendingEntry struct {
-	pending int
-
+	pending          int
 	autoBlockedUntil time.Time
-	autoCreatedAt    time.Time
-	autoUpdatedAt    time.Time
-
-	manualBlockedUntil time.Time
-	manualReason       string
-	manualActor        string
-	manualCreatedAt    time.Time
-	manualUpdatedAt    time.Time
 }
 
-// PendingSnapshot is a read-only view of one pending bucket. It is scoped to
-// the current backend instance; it is not a cluster-wide block list.
-type PendingSnapshot struct {
-	IP           string    `json:"ip"`
-	Pending      int       `json:"pending"`
-	Blocked      bool      `json:"blocked"`
-	BlockedUntil time.Time `json:"blocked_until,omitempty"`
-	Source       string    `json:"source,omitempty"`
-	Reason       string    `json:"reason,omitempty"`
-	Actor        string    `json:"actor,omitempty"`
-	CreatedAt    time.Time `json:"created_at,omitempty"`
-	UpdatedAt    time.Time `json:"updated_at,omitempty"`
-}
-
-// IPPendingBlocker is an in-process pending-request limiter and manual IP
-// denylist. It protects one backend instance; state is lost on restart and is
-// not shared across replicas.
+// IPPendingBlocker is an in-process pending-request limiter that protects one
+// backend instance; state is lost on restart and is not shared across replicas.
 type IPPendingBlocker struct {
 	mu        sync.Mutex
 	maxPerIP  int
@@ -104,7 +54,7 @@ func NewIPPendingBlocker(maxPerIP int, blockTTL time.Duration) *IPPendingBlocker
 }
 
 // CanonicalIP validates one IP address and normalises IPv4-mapped IPv6.
-// CIDRs are intentionally rejected because the Phase 2 denylist is per-IP.
+// CIDRs are rejected because the pending limit is applied per address.
 func CanonicalIP(ip string) (string, error) {
 	ip = strings.TrimSpace(ip)
 	if ip == "" || strings.Contains(ip, "/") {
@@ -117,9 +67,9 @@ func CanonicalIP(ip string) (string, error) {
 	return addr.Unmap().String(), nil
 }
 
-// Enter reserves one pending slot. Existing automatic or manual blocks reject
-// the request without extending their TTL. Overflow starts a fixed automatic
-// block; repeated rejected requests do not keep it alive indefinitely.
+// Enter reserves one pending slot. An existing block rejects the request
+// without extending its TTL. Overflow starts a fixed block; repeated rejected
+// requests do not keep it alive indefinitely.
 func (b *IPPendingBlocker) Enter(ip string) (func(), bool) {
 	if b == nil {
 		return func() {}, false
@@ -145,10 +95,6 @@ func (b *IPPendingBlocker) Enter(ip string) (func(), bool) {
 	}
 	if entry.pending >= b.maxPerIP {
 		entry.autoBlockedUntil = now.Add(b.blockTTL)
-		if entry.autoCreatedAt.IsZero() {
-			entry.autoCreatedAt = now
-		}
-		entry.autoUpdatedAt = now
 		b.entries[canonical] = entry
 		return func() {}, true
 	}
@@ -159,117 +105,6 @@ func (b *IPPendingBlocker) Enter(ip string) (func(), bool) {
 	return func() {
 		once.Do(func() { b.release(canonical) })
 	}, false
-}
-
-// ManuallyBlocked reports only the operator-managed denylist state. It is
-// intentionally separate from automatic pending blocks so auth can enforce it
-// before bypass_all without changing the existing automatic pending scope.
-func (b *IPPendingBlocker) ManuallyBlocked(ip string) bool {
-	if b == nil {
-		return false
-	}
-	canonical, err := CanonicalIP(ip)
-	if err != nil {
-		return false
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.closed {
-		return false
-	}
-	now := b.now()
-	b.sweepLocked(now)
-	entry, ok := b.entries[canonical]
-	if !ok {
-		return false
-	}
-	b.expireEntryLocked(now, &entry)
-	if entry.pending == 0 && !b.blockedAt(now, entry) {
-		delete(b.entries, canonical)
-		return false
-	}
-	b.entries[canonical] = entry
-	return now.Before(entry.manualBlockedUntil)
-}
-
-func (b *IPPendingBlocker) Block(ip string, input BlockInput) (BlockResult, error) {
-	canonical, err := CanonicalIP(ip)
-	if err != nil {
-		return BlockResult{}, err
-	}
-	input.Reason = strings.TrimSpace(input.Reason)
-	input.Actor = strings.TrimSpace(input.Actor)
-	if input.TTL <= 0 || input.Reason == "" || input.Actor == "" {
-		return BlockResult{}, ErrInvalidBlock
-	}
-	if b == nil {
-		return BlockResult{}, ErrBlockerClosed
-	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.closed {
-		return BlockResult{}, ErrBlockerClosed
-	}
-	now := b.now()
-	b.sweepLocked(now)
-	entry := b.entries[canonical]
-	b.expireEntryLocked(now, &entry)
-
-	requestedUntil := now.Add(input.TTL)
-	changed := entry.manualBlockedUntil.IsZero() || requestedUntil.After(entry.manualBlockedUntil) ||
-		entry.manualReason != input.Reason || entry.manualActor != input.Actor
-	if entry.manualCreatedAt.IsZero() {
-		entry.manualCreatedAt = now
-	}
-	if requestedUntil.After(entry.manualBlockedUntil) {
-		entry.manualBlockedUntil = requestedUntil
-	}
-	entry.manualReason = input.Reason
-	entry.manualActor = input.Actor
-	if changed {
-		entry.manualUpdatedAt = now
-	}
-	b.entries[canonical] = entry
-	return BlockResult{Changed: changed, State: b.snapshotLocked(canonical, entry, now)}, nil
-}
-
-// Unblock clears only the manual block. An unexpired automatic pending block
-// remains effective and is reflected in the returned state.
-func (b *IPPendingBlocker) Unblock(ip string) (BlockResult, error) {
-	canonical, err := CanonicalIP(ip)
-	if err != nil {
-		return BlockResult{}, err
-	}
-	if b == nil {
-		return BlockResult{}, ErrBlockerClosed
-	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.closed {
-		return BlockResult{}, ErrBlockerClosed
-	}
-	now := b.now()
-	b.sweepLocked(now)
-	entry, ok := b.entries[canonical]
-	if !ok {
-		return BlockResult{State: PendingSnapshot{IP: canonical}}, nil
-	}
-	b.expireEntryLocked(now, &entry)
-	changed := !entry.manualBlockedUntil.IsZero()
-	entry.manualBlockedUntil = time.Time{}
-	entry.manualReason = ""
-	entry.manualActor = ""
-	entry.manualCreatedAt = time.Time{}
-	entry.manualUpdatedAt = time.Time{}
-	state := b.snapshotLocked(canonical, entry, now)
-	if entry.pending == 0 && !b.blockedAt(now, entry) {
-		delete(b.entries, canonical)
-	} else {
-		b.entries[canonical] = entry
-	}
-	return BlockResult{Changed: changed, State: state}, nil
 }
 
 func (b *IPPendingBlocker) release(ip string) {
@@ -295,21 +130,12 @@ func (b *IPPendingBlocker) release(ip string) {
 }
 
 func (b *IPPendingBlocker) blockedAt(now time.Time, entry pendingEntry) bool {
-	return now.Before(entry.autoBlockedUntil) || now.Before(entry.manualBlockedUntil)
+	return now.Before(entry.autoBlockedUntil)
 }
 
 func (b *IPPendingBlocker) expireEntryLocked(now time.Time, entry *pendingEntry) {
 	if !entry.autoBlockedUntil.IsZero() && !now.Before(entry.autoBlockedUntil) {
 		entry.autoBlockedUntil = time.Time{}
-		entry.autoCreatedAt = time.Time{}
-		entry.autoUpdatedAt = time.Time{}
-	}
-	if !entry.manualBlockedUntil.IsZero() && !now.Before(entry.manualBlockedUntil) {
-		entry.manualBlockedUntil = time.Time{}
-		entry.manualReason = ""
-		entry.manualActor = ""
-		entry.manualCreatedAt = time.Time{}
-		entry.manualUpdatedAt = time.Time{}
 	}
 }
 
@@ -328,78 +154,6 @@ func (b *IPPendingBlocker) sweepLocked(now time.Time) {
 	}
 }
 
-func (b *IPPendingBlocker) Snapshot() []PendingSnapshot {
-	if b == nil {
-		return []PendingSnapshot{}
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.closed {
-		return []PendingSnapshot{}
-	}
-	now := b.now()
-	b.sweepLocked(now)
-	out := make([]PendingSnapshot, 0, len(b.entries))
-	for ip, entry := range b.entries {
-		b.expireEntryLocked(now, &entry)
-		if entry.pending == 0 && !b.blockedAt(now, entry) {
-			continue
-		}
-		b.entries[ip] = entry
-		out = append(out, b.snapshotLocked(ip, entry, now))
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].IP < out[j].IP })
-	return out
-}
-
-func (b *IPPendingBlocker) snapshotLocked(ip string, entry pendingEntry, now time.Time) PendingSnapshot {
-	auto := now.Before(entry.autoBlockedUntil)
-	manual := now.Before(entry.manualBlockedUntil)
-	item := PendingSnapshot{IP: ip, Pending: entry.pending, Blocked: auto || manual}
-
-	switch {
-	case auto && manual:
-		item.Source = "automatic+manual"
-		item.Reason = "pending_limit; " + entry.manualReason
-		item.Actor = entry.manualActor
-		item.BlockedUntil = maxTime(entry.autoBlockedUntil, entry.manualBlockedUntil)
-		item.CreatedAt = minNonZeroTime(entry.autoCreatedAt, entry.manualCreatedAt)
-		item.UpdatedAt = maxTime(entry.autoUpdatedAt, entry.manualUpdatedAt)
-	case manual:
-		item.Source = "manual"
-		item.Reason = entry.manualReason
-		item.Actor = entry.manualActor
-		item.BlockedUntil = entry.manualBlockedUntil
-		item.CreatedAt = entry.manualCreatedAt
-		item.UpdatedAt = entry.manualUpdatedAt
-	case auto:
-		item.Source = "automatic"
-		item.Reason = "pending_limit"
-		item.Actor = "system"
-		item.BlockedUntil = entry.autoBlockedUntil
-		item.CreatedAt = entry.autoCreatedAt
-		item.UpdatedAt = entry.autoUpdatedAt
-	}
-	return item
-}
-
-func maxTime(a, b time.Time) time.Time {
-	if a.After(b) {
-		return a
-	}
-	return b
-}
-
-func minNonZeroTime(a, b time.Time) time.Time {
-	if a.IsZero() {
-		return b
-	}
-	if b.IsZero() || a.Before(b) {
-		return a
-	}
-	return b
-}
-
 func (b *IPPendingBlocker) Close() error {
 	if b == nil {
 		return nil
@@ -414,8 +168,4 @@ func (b *IPPendingBlocker) Close() error {
 	return nil
 }
 
-var (
-	_ PendingBlocker     = (*IPPendingBlocker)(nil)
-	_ ManualBlockChecker = (*IPPendingBlocker)(nil)
-	_ IPBlockAdmin       = (*IPPendingBlocker)(nil)
-)
+var _ PendingBlocker = (*IPPendingBlocker)(nil)

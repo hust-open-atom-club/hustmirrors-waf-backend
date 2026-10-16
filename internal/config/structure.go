@@ -7,8 +7,8 @@ import (
 )
 
 // ValidateYAMLStructure rejects ambiguous YAML before Viper decoding. It keeps
-// the managed configuration flow deterministic without returning source lines
-// or values to Admin API callers.
+// the managed configuration flow deterministic without leaking source lines
+// or values into error messages.
 func ValidateYAMLStructure(raw []byte) error {
 	var root yaml.Node
 	if err := yaml.Unmarshal(raw, &root); err != nil {

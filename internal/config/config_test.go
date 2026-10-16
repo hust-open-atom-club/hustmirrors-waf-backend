@@ -244,8 +244,6 @@ func TestApplyDefaults_CleanupCanBeExplicitlyDisabled(t *testing.T) {
 	assert.False(t, *c.Cleanup.Enabled, "an explicit false must be preserved")
 }
 
-// that silently exposed the admin API: no token configured means
-// unauthenticated, which is only defensible on a confined listener.
 func TestValidate_CounterKeyMustBeSupported(t *testing.T) {
 	base := func(key string) *Config {
 		c := &Config{}

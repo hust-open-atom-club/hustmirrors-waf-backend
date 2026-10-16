@@ -2,8 +2,8 @@ package config
 
 import "time"
 
-// Exported so the admin API's config.validate can run the same defaults
-// pipeline against a candidate config without applying it.
+// Exported so callers can run the same defaults pipeline against a
+// candidate config without applying it.
 func ApplyDefaults(c *Config) {
 	applyDefaults(c)
 }

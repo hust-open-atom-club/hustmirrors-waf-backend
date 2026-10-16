@@ -9,20 +9,7 @@ bin/
 *.out
 coverage.*
 
-# Frontend dependencies and caches
-admin-ui/node_modules/
-admin-ui/.vite/
-admin-ui/*.tsbuildinfo
-npm-debug.log*
-
-# Generated embedded UI assets; the Docker build regenerates them
-internal/adminui/dist/
-
 # Local development and acceptance artifacts
 .phase*-e2e/
 .env
 .env.*
-
-# Docker secrets must never enter the build context
-**/secrets/*
-!**/secrets/.gitkeep

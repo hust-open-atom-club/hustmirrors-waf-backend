@@ -29,11 +29,11 @@ import (
 )
 
 type App struct {
-	cfg         *config.Config
-	logger      logging.Logger
-	metrics     *metrics.Container
-	authSvc     *auth.Service
-	mainSrv     *echo.Server
+	cfg     *config.Config
+	logger  logging.Logger
+	metrics *metrics.Container
+	authSvc *auth.Service
+	mainSrv *echo.Server
 
 	storageCloser  func() error
 	redisClient    *redis.Client

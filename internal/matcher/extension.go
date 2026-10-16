@@ -47,8 +47,7 @@ func (m *ExtensionMatcher) ShouldProtect(path string) bool {
 	return false
 }
 
-// Extensions returns the normalised extension list. Used by tests and by
-// the admin API's config introspection.
+// Extensions returns the normalised extension list. Used by tests.
 func (m *ExtensionMatcher) Extensions() []string {
 	out := make([]string, len(m.exts))
 	copy(out, m.exts)

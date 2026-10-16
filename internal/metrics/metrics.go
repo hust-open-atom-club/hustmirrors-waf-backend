@@ -54,8 +54,6 @@ func New() *Container {
 			Buckets:   prometheus.DefBuckets,
 		}, []string{"driver", "operation"}),
 
-
-
 		ActiveSignatures: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: "mirrors_waf",
 			Subsystem: "storage",

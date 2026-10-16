@@ -144,12 +144,6 @@ func (s *Service) Verify(ctx context.Context, req AuthRequest) AuthResult {
 	// defer here, so that the "mode" label is populated. Every return path
 	// below calls recordResult exactly once.
 
-	if checker, ok := s.pendingBlocker.(risk.ManualBlockChecker); ok && checker.ManuallyBlocked(req.RealIP) {
-		res := denyStatus(429, ReasonIPManuallyBlocked, "")
-		s.recordResult(vctx, res)
-		return res
-	}
-
 	if s.bypassAllEffective() {
 		res := allowDecision(ReasonBypassAll, "", DecisionBypass)
 		s.recordResult(vctx, res)

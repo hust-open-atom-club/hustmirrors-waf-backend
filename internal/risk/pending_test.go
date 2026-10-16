@@ -104,3 +104,20 @@ func TestIPPendingBlocker_DoesNotTrackEmptyIP(t *testing.T) {
 	}
 	assert.Empty(t, b.entries)
 }
+
+func TestCanonicalIPRejectsInvalidAndCIDR(t *testing.T) {
+	tests := []struct {
+		name string
+		ip   string
+	}{
+		{name: "empty", ip: ""},
+		{name: "invalid", ip: "not-an-ip"},
+		{name: "cidr", ip: "192.0.2.0/24"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := CanonicalIP(tt.ip)
+			assert.ErrorIs(t, err, ErrInvalidBlockIP)
+		})
+	}
+}

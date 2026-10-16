@@ -103,7 +103,6 @@ func TestServer_Readyz(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
-
 func TestServer_ClientIP(t *testing.T) {
 	s := NewMain(MainOptions{Config: &config.Config{}, Logger: logging.NewNop()})
 	req := httptest.NewRequest(http.MethodGet, "/verify_pow", nil)

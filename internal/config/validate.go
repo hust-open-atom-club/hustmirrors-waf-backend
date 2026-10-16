@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"net"
-	"net/url"
 	"regexp"
 	"strings"
 
@@ -115,7 +114,6 @@ func Validate(c *Config) error {
 		e.checkRiskControl(c.RiskControl)
 	}
 
-
 	if c.Server.ReadTimeout <= 0 {
 		e.add("server.read_timeout must be > 0")
 	}
@@ -221,16 +219,6 @@ func (e *ValidationError) checkRiskControl(rc RiskControlConfig) {
 		default:
 			e.add("risk_control.counters.%s: storage %q is not supported", name, ctr.Storage)
 		}
-	}
-}
-
-func checkAdminURL(e *ValidationError, name, raw string) {
-	if raw == "" {
-		return
-	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
-		e.add("%s must be an absolute http or https URL", name)
 	}
 }
 

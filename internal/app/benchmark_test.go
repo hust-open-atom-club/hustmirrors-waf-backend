@@ -115,10 +115,10 @@ func buildBenchApp(b *testing.B) *App {
 	cfg.Storage.Driver = "memory"
 	cfg.Storage.CounterDriver = "memory"
 	cfg.RiskControl.Enabled = false
-	cfg.Admin.Enabled = false
 	cfg.Logging.Level = "error"
 	cfg.Logging.Format = "json"
-	cfg.Cleanup.Enabled = false
+	off := false
+	cfg.Cleanup.Enabled = &off
 
 	a, err := Build(context.Background(), cfg)
 	if err != nil {

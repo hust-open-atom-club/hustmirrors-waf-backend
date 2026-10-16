@@ -11,7 +11,7 @@ import (
 )
 
 // Loaded carries the effective config together with the source metadata needed
-// by the single-instance admin config manager.
+// by the local config manager (the garmr CLI).
 type Loaded struct {
 	Config   *Config
 	Path     string
