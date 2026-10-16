@@ -1,6 +1,6 @@
 # 部署与联调指南
 
-本文档覆盖从本地构建到生产上线的完整流程。按顺序执行。
+本文档覆盖从本地构建到生产上线的完整流程。
 
 ## 1. 前置条件
 
@@ -52,6 +52,19 @@ MIRRORS_WAF_STORAGE__DRIVER=postgres
 MIRRORS_WAF_POW__PUBLIC_SALT=prod-salt-2025
 ```
 
+配置的编辑与回滚推荐走 `garmr` CLI（服务无需运行，历史保存在配置文件同目录 `.mirrors-waf-history/`）：
+
+```bash
+make build-cli
+
+garmr config edit                 # 编辑 → 校验 → diff → 确认 → 原子写入
+garmr config history              # 修订历史
+garmr config rollback 3           # 回滚到 revision 3
+garmr rule preview -path /ubuntu.iso -pow missing   # 模拟请求走风控链
+```
+
+`config edit` 对危险变更（如关闭 PoW、放宽难度）会要求输入确认短语与原因。写入后需重启服务生效。
+
 ## 4. 数据库迁移（使用 PostgreSQL 时）
 
 ```bash
@@ -65,9 +78,7 @@ make migrate-up
 # make migrate-down
 ```
 
-迁移文件在 `migrations/001_init.sql`，创建三张表：
-- `pow_usage`：generic 模式使用记录
-- `risk_counter`：风控计数器快照
+迁移文件在 `migrations/001_init.sql`，创建 `pow_usage` 表（generic 模式使用记录）和两个索引。风控计数器不落库，保存在内存或 Redis。
 
 ## 5. 启动
 
@@ -163,6 +174,8 @@ sudo systemctl reload nginx
 
 ## 7. 回滚
 
+以下都是手工编辑配置的应急手段；常规配置回退用 `garmr config rollback <revision>`（见第 3 节），有 diff 预览且会自动留档。
+
 ### 紧急放行（后端故障）
 
 ```bash
@@ -219,11 +232,9 @@ Nginx 配置移除 `auth_request`，直接走 `try_files`。后端可停掉。
 ## 9. 压测
 
 ```bash
-# 安装 vegeta
-go install github.com/tsenart/vegeta@latest
+go test -tags=benchmark -bench=. -benchmem ./internal/app/...
 
-# 压测脚本见 deploy/benchmark/attack.txt
-# 场景：纯 PoW 验证（无存储）的 QPS 基线
+# 端到端压测（HTTP 层，Nginx 风格请求头）：deploy/benchmark/verify_pow.txt
 vegeta attack -duration=60s -rate=500 -targets=deploy/benchmark/verify_pow.txt | tee results.bin
 vegeta report -type=text results.bin
 ```
@@ -252,7 +263,7 @@ A: 用 `X-Pow-Limit-Rate-Bytes`（纯字节数，后端对空值统一输出 `0`
 
 ### Q: 后端日志报 `storage_error`？
 
-A: 检查 PostgreSQL / Redis 连接。`storage_error` 通常是存储层故障，后端会返回 500，Nginx 触发 `@pow_backend_error` 返回 503。
+A: 检查 PostgreSQL / Redis 连接。`storage_error` 是存储层故障，后端返回 500，Nginx 的 `auth_request` 会把这个 500 透传给客户端。
 
 ### Q: 用户反馈"下载被拒绝"？
 
@@ -262,9 +273,9 @@ A: 查后端日志，按 `request_id` 过滤。常见原因：
 - IP 不匹配（`ip_mismatch`，ip_bound 模式）
 - PoW 难度不足（`difficulty_not_met`，签发方与后端配置不一致）
 
-### Q: 前端生成的 token 后端不认？
+### Q: 自己签发的 token 后端不认？
 
-A: 99% 是 `config.json` 和后端 `config.yaml` 的 `salt` / `difficulty` 不一致。对比两边的值。
+A: 通常是签发脚本与后端 `config.yaml` 不一致。检查三处：token 里的 `salt` 必须是后端的 `pow.public_salt` 或 `allowed_previous_salts` 之一；`d` 必须落在对应模式的 `min_difficulty` / `max_difficulty` 区间；`exp - ts` 不能超过 `max_ttl_seconds`。
 
 ### Q: generic 链接用了一次就 used_up？
 

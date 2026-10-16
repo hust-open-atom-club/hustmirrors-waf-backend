@@ -160,9 +160,6 @@ risk_control:
           status: 429
           reason: "extreme_abuse"
 
-admin:
-  enabled: false
-
 logging:
   level: "info"
   format: "json"

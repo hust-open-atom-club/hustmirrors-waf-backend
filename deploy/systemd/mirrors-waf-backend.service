@@ -35,7 +35,7 @@ MemoryDenyWriteExecute=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 
-# The service needs to read its config file and (optional) admin token file.
+# The service needs to read its config file.
 ReadOnlyPaths=/etc/mirrors-waf
 ReadWritePaths=/var/lib/mirrors-waf
 

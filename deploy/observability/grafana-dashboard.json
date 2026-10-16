@@ -116,18 +116,6 @@
           "legendFormat": "active"
         }
       ]
-    },
-    {
-      "title": "Admin API Actions",
-      "type": "timeseries",
-      "datasource": "Prometheus",
-      "gridPos": {"h": 8, "w": 12, "x": 18, "y": 16},
-      "targets": [
-        {
-          "expr": "sum(rate(mirrors_waf_admin_actions_total[5m])) by (action, outcome)",
-          "legendFormat": "{{action}} {{outcome}}"
-        }
-      ]
     }
   ],
   "schemaVersion": 27,

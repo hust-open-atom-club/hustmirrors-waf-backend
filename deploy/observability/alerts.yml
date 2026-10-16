@@ -83,7 +83,7 @@ groups:
           summary: "mirrors-waf-backend storage errors"
           description: "Storage operations are failing. Check PostgreSQL/Redis connectivity."
 
-      # Dry-run mode accidentally left on in production.
+      # Dry-run mode is active.
       - alert: MirrorsWafDryRunInProd
         expr: mirrors_waf_pow_verify_total{reason="dry_run_allow"} > 0
         for: 10m
@@ -91,4 +91,4 @@ groups:
           severity: info
         annotations:
           summary: "mirrors-waf-backend dry_run is ON"
-          description: "Dry-run mode is active. Denies are being rewritten to allows. Turn off for production."
+          description: "Dry-run mode is active: denies are being rewritten to allows."

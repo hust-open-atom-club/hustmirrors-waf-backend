@@ -1,5 +1,5 @@
 # Minimal config suitable for local development.
-# Uses in-memory storage and disables risk control + admin API.
+# Uses in-memory storage and disables risk control.
 
 server:
   listen: "127.0.0.1:8080"

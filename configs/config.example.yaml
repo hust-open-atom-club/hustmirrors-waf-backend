@@ -1,9 +1,9 @@
 # =============================================================================
 # mirrors-waf-backend example configuration.
 #
-# Copy this file to config.local.yaml and adjust as needed. The service
-# will auto-discover config.local.yaml in the current directory or in
-# ./configs/; you can also pass --config /path/to/config.yaml explicitly.
+# Copy this file to config.yaml and adjust as needed. Without --config the
+# service looks for config.yaml in the current directory, then ./configs/,
+# then /etc/mirrors-waf/; --config takes an explicit path.
 #
 # Environment variable overrides use prefix MIRRORS_WAF_ with "__" as the
 # section separator, e.g.:
@@ -29,11 +29,11 @@ pow:
   # X-Pow-Dry-Run-Original-Error header. Useful for staging.
   dry_run: false
 
-  # Bypass PoW and normal risk decisions. Admin-managed manual IP blocks are
-  # checked first and still reject. Use this as an emergency switch only.
+  # Bypass PoW and the normal risk chains. Use this as an emergency
+  # switch only.
   bypass_all: false
 
-  # URL parameter names. Change here if your front-end uses a different
+  # URL parameter names. Change here if your token issuer uses a different
   # convention.
   token_param: "token"
   sign_param: "sign"

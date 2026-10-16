@@ -14,7 +14,7 @@ LDFLAGS := -s -w \
 	-X github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/version.Commit=$(COMMIT) \
 	-X github.com/hust-open-atom-club/hustmirrors-waf-backend/internal/version.BuildTime=$(BUILD_TIME)
 
-.PHONY: all build build-cli test test-race test-postgres coverage vet lint fmt tidy migrate-up migrate-down clean help
+.PHONY: all build build-cli run test test-race test-postgres coverage vet lint fmt tidy migrate-up migrate-down clean help
 
 all: build
 
