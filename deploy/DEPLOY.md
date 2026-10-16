@@ -6,7 +6,7 @@
 
 | 组件 | 版本要求 | 说明 |
 |---|---|---|
-| Go | 1.24+ | 构建后端 |
+| Go | 1.25.7+ | 构建后端（go.mod 要求的最低工具链版本） |
 | Nginx | 1.18+ | `auth_request` + `limit_rate` 变量支持 |
 | PostgreSQL | 14+ | 可选，`storage.driver: postgres` 时需要 |
 | Redis | 6+ | 可选，`storage.counter_driver: redis` 或 `storage.driver: redis` 时需要 |
@@ -146,9 +146,13 @@ curl http://127.0.0.1:8080/readyz
 ### systemd 托管
 
 ```bash
+# unit 以 User=mirrors-waf 运行，并要求 /var/lib/mirrors-waf 可写
+sudo useradd -r -s /usr/sbin/nologin -d /var/lib/mirrors-waf -M mirrors-waf
+sudo mkdir -p /etc/mirrors-waf /var/lib/mirrors-waf
+sudo chown mirrors-waf:mirrors-waf /var/lib/mirrors-waf
+
 sudo cp deploy/systemd/mirrors-waf-backend.service /etc/systemd/system/
 sudo cp bin/server /usr/local/bin/
-sudo mkdir -p /etc/mirrors-waf
 sudo cp configs/config.example.yaml /etc/mirrors-waf/config.yaml
 # 编辑 /etc/mirrors-waf/config.yaml
 

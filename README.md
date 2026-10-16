@@ -9,7 +9,7 @@
 > Runs as an Nginx `auth_request` backend; the token travels in the URL, so
 > wget and curl work out of the box — no cookies, no sessions.
 
-[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.25.7+-00ADD8)](https://go.dev/)
 [![Echo](https://img.shields.io/badge/Echo-v4-00ADD8)](https://echo.labstack.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -350,6 +350,12 @@ MIRRORS_WAF_STORAGE__DRIVER=postgres
 ### systemd
 
 ```bash
+# Prerequisite: the unit runs as User=mirrors-waf and needs /var/lib/mirrors-waf
+# (full checklist in deploy/DEPLOY.md)
+sudo useradd -r -s /usr/sbin/nologin mirrors-waf
+sudo mkdir -p /etc/mirrors-waf /var/lib/mirrors-waf
+sudo chown mirrors-waf:mirrors-waf /var/lib/mirrors-waf
+
 sudo cp deploy/systemd/mirrors-waf-backend.service /etc/systemd/system/
 sudo cp bin/server /usr/local/bin/
 sudo cp configs/config.example.yaml /etc/mirrors-waf/config.yaml
